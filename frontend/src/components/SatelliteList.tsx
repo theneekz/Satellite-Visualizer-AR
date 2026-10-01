@@ -1,6 +1,10 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import type { SatelliteInfo } from '../api/satellites'
-import './SatelliteList.css'
+import { useEffect, useRef, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type { SatelliteInfo } from "../api/satellites";
+import "./SatelliteList.css";
+
+// Must match .satellite-list__item's height in SatelliteList.css.
+const ROW_HEIGHT_PX = 34;
 
 function SatelliteList({
   satellites,
@@ -10,24 +14,35 @@ function SatelliteList({
   onSelect,
   children,
 }: {
-  satellites: SatelliteInfo[]
-  totalCount: number // size of the unfiltered list
-  loading: boolean
-  selectedId: number | null
-  onSelect: (id: number) => void
-  children?: ReactNode // search and filter controls, shown above the rows
+  satellites: SatelliteInfo[];
+  totalCount: number; // size of the unfiltered list
+  loading: boolean;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  children?: ReactNode; // search and filter controls, shown above the rows
 }) {
-  // When a satellite is selected from the globe, bring its row into view.
-  const selectedRef = useRef<HTMLButtonElement>(null)
+  // Only the rows in (or near) view are rendered, so the DOM stays small for any list size.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: satellites.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT_PX,
+    overscan: 10,
+  });
+
+  // When a satellite is selected from the globe, bring its row into view. The row may not be
+  // rendered, so scroll by index rather than via its element.
   useEffect(() => {
-    selectedRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [selectedId])
+    if (selectedId === null) return;
+    const index = satellites.findIndex((s) => s.id === selectedId);
+    if (index !== -1) virtualizer.scrollToIndex(index, { align: "auto" });
+  }, [selectedId, satellites, virtualizer]);
 
   return (
     <nav className="satellite-list" aria-label="Satellites" aria-busy={loading}>
       <h2 className="satellite-list__title">
         {loading
-          ? 'Satellites'
+          ? "Satellites"
           : satellites.length === totalCount
             ? `Satellites (${totalCount})`
             : `Satellites (${satellites.length} of ${totalCount})`}
@@ -39,31 +54,47 @@ function SatelliteList({
         </p>
       ) : satellites.length === 0 ? (
         <p className="satellite-list__message">
-          {totalCount > 0 ? 'No satellites match your filters.' : 'No satellites found.'}
+          {totalCount > 0
+            ? "No satellites match your filters."
+            : "No satellites found."}
         </p>
       ) : (
-        <ul className="satellite-list__items">
-          {satellites.map((satellite) => {
-            const selected = satellite.id === selectedId
-            return (
-              <li key={satellite.id}>
-                <button
-                  type="button"
-                  ref={selected ? selectedRef : undefined}
-                  className={`satellite-list__item${selected ? ' is-selected' : ''}`}
-                  aria-pressed={selected}
-                  onClick={() => onSelect(satellite.id)}
+        <div className="satellite-list__items" ref={scrollRef}>
+          {/* Full-height list so the scrollbar matches every row; visible rows are positioned in it. */}
+          <ul
+            className="satellite-list__rows"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((row) => {
+              const satellite = satellites[row.index];
+              const selected = satellite.id === selectedId;
+              return (
+                <li
+                  key={satellite.id}
+                  className="satellite-list__row"
+                  style={{ transform: `translateY(${row.start}px)` }}
+                  aria-setsize={satellites.length}
+                  aria-posinset={row.index + 1}
                 >
-                  <span className="satellite-list__name">{satellite.name}</span>
-                  <span className="satellite-list__id">{satellite.id}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+                  <button
+                    type="button"
+                    className={`satellite-list__item${selected ? " is-selected" : ""}`}
+                    aria-pressed={selected}
+                    onClick={() => onSelect(satellite.id)}
+                  >
+                    <span className="satellite-list__name">
+                      {satellite.name}
+                    </span>
+                    <span className="satellite-list__id">{satellite.id}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </nav>
-  )
+  );
 }
 
-export default SatelliteList
+export default SatelliteList;

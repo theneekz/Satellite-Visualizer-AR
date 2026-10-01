@@ -32,18 +32,33 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.satellite-list__rows {
+  position: relative;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Rows are virtualized: each is placed absolutely at its offset in the full-height list. */
+.satellite-list__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
 .satellite-list__item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
   width: 100%;
+  /* Fixed so the virtualizer can position rows without measuring (ROW_HEIGHT_PX). */
+  height: 34px;
   box-sizing: border-box;
-  padding: 8px;
+  padding: 0 8px;
   font: inherit;
   font-size: 0.85rem;
   color: inherit;
@@ -67,6 +82,13 @@
 .satellite-list__item:focus-visible {
   outline: 2px solid #85b7eb;
   outline-offset: -2px;
+}
+
+.satellite-list__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .satellite-list__id {
