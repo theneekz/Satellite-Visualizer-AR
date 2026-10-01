@@ -1,3 +1,6 @@
+import { fromBinary } from "@bufbuild/protobuf";
+import { OMMListSchema, type OMM } from "../protos/omm_pb";
+
 /** One satellite state in the GCRS inertial frame: position in km, velocity in km/s. */
 export interface SatellitePosition {
   x: number;
@@ -63,16 +66,44 @@ export function positionAt(
   };
 }
 
-const SATELLITES_URL = "http://localhost:8000/v1/satellites";
+const SATELLITES_URL = "http://localhost:8000/v2/satellites";
 const POSITIONS_URL = "http://localhost:8000/v2/positions";
 
-export async function getSatellites(): Promise<SatelliteInfo[]> {
-  const response = await fetch(SATELLITES_URL);
+/** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */
+function toSatelliteInfo(omm: OMM): SatelliteInfo {
+  return {
+    id: omm.id,
+    name: omm.name,
+    designator: omm.designator,
+    // int64 decodes as bigint; Unix milliseconds fit exactly in a JS number.
+    epoch_ms: Number(omm.epochMs),
+    period_min: omm.periodMin,
+    inclination_deg: omm.inclinationDeg,
+    eccentricity: omm.eccentricity,
+    perigee_km: omm.perigeeKm,
+    apogee_km: omm.apogeeKm,
+    mean_motion: omm.meanMotion,
+    raan_deg: omm.raanDeg,
+    arg_perigee_deg: omm.argPerigeeDeg,
+    mean_anomaly_deg: omm.meanAnomalyDeg,
+    bstar: omm.bstar,
+    rev_at_epoch: omm.revAtEpoch,
+    // Unset proto3 optional fields decode as undefined.
+    object_type: omm.objectType ?? null,
+    rcs: omm.rcs ?? null,
+    originator: omm.originator ?? null,
+  };
+}
+
+export async function getSatellites(
+  signal?: AbortSignal
+): Promise<SatelliteInfo[]> {
+  const response = await fetch(SATELLITES_URL, { signal });
   if (!response.ok) {
-    throw new Error(`GET /v1/satellites failed with status ${response.status}`);
+    throw new Error(`GET /v2/satellites failed with status ${response.status}`);
   }
-  const body: { satellites: SatelliteInfo[] } = await response.json();
-  return body.satellites;
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return fromBinary(OMMListSchema, bytes).satellites.map(toSatelliteInfo);
 }
 
 export async function getPositions(

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run dev --prefix frontend & cd backend && venv/bin/uvicorn main:app --reload",
-    "py-proto": "python -m grpc_tools.protoc --proto_path=shared --python_out=backend/protos --pyi_out=backend/protos shared/omm.proto"
+    "py-proto": "python -m grpc_tools.protoc --proto_path=shared --python_out=backend/protos --pyi_out=backend/protos shared/omm.proto",
+    "ts-proto": "protoc --plugin=frontend/node_modules/.bin/protoc-gen-es --proto_path=shared --es_out=frontend/src/protos --es_opt=target=ts shared/omm.proto"
   }
 }

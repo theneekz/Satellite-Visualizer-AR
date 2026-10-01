@@ -21,14 +21,18 @@ function App() {
   const positionsRef = usePositionsPolling();
 
   useEffect(() => {
-    getSatellites()
-      // The backend sends {} for records it couldn't parse; drop those.
-      .then((list) => setSatellites(list.filter((s) => s.id !== undefined)))
+    const controller = new AbortController();
+    getSatellites(controller.signal)
+      .then(setSatellites)
       .catch((err) => {
+        if (controller.signal.aborted) return;
         // A backend failure shouldn't take the globe down; show it without satellites.
         console.error("Failed to load satellites:", err);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, []);
 
   // Merges a partial update, keeping the same state object when nothing actually changed so an
@@ -53,7 +57,10 @@ function App() {
     () => (isFiltering(filters) ? new Set(filtered.map((s) => s.id)) : null),
     [filtered, filters]
   );
-  const filterOptions = useMemo(() => getFilterOptions(satellites), [satellites]);
+  const filterOptions = useMemo(
+    () => getFilterOptions(satellites),
+    [satellites]
+  );
 
   const selected = satellites.find((s) => s.id === selectedId) ?? null;
 
