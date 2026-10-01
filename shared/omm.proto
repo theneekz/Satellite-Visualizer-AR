@@ -24,7 +24,6 @@ message OMM {
   optional string originator = 18;
 }
 
-// Response shape of /v1/satellites.
 message OMMList {
   repeated OMM satellites = 1;
 }
