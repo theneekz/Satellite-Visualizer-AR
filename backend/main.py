@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 import math
@@ -15,7 +16,14 @@ import json
 import gzip
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Build the v2 caches once before serving, so no request sees (or races to fill) an empty cache.
+    load_v2_cache()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -123,6 +131,14 @@ def set_station_data():
     log("cached sats length", len(cached_sats))
 
 
+@time_function
+def load_v2_cache():
+    global cached_records
+    cached_records = read_station_data()
+    update_satrecs(load.timescale())
+    build_omm_protos()
+
+
 # Until API usage is secured, read stale file
 @time_function
 def read_station_data() -> List[dict]:
@@ -223,12 +239,8 @@ def build_position_byte_list(ids, pos, vel):
 @app.get("/v2/satellites")
 @time_function
 def get_satellites_v2():
-    global cached_records
-    if not cached_records:
-        cached_records = read_station_data()
     if not cached_omms_gz:
-        build_omm_protos()
-
+        return Response(status_code=503, content="Satellite cache not loaded")
     return Response(
         content=cached_omms_gz,
         media_type="application/x-protobuf",
@@ -238,14 +250,11 @@ def get_satellites_v2():
 @app.get("/v2/positions")
 @time_function
 def get_positions_v2():
-    global cached_records
-    if not cached_records:
-        cached_records = read_station_data()
+    if not len(satrecs):
+        return Response(status_code=503, content="Satellite cache not loaded")
     ts = load.timescale()
     t = ts.now()
 
-    if not len(satrecs):
-        update_satrecs(ts)
     positions = build_positions(t)
     time = cast(datetime, t.utc_datetime())
     millis = time.timestamp() * 1000
