@@ -1,0 +1,76 @@
+.satellite-list {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 260px;
+  box-sizing: border-box;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  color: #fff;
+  background: rgba(10, 12, 24, 0.55);
+  backdrop-filter: blur(6px);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.satellite-list__title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.satellite-list__message {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.6;
+}
+
+/* Only the rows scroll, so the search and filters stay in view. */
+.satellite-list__items {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.satellite-list__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.satellite-list__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.satellite-list__item.is-selected {
+  background: rgba(133, 183, 235, 0.16);
+  border-bottom-color: rgba(133, 183, 235, 0.4);
+}
+
+.satellite-list__item:focus-visible {
+  outline: 2px solid #85b7eb;
+  outline-offset: -2px;
+}
+
+.satellite-list__id {
+  flex-shrink: 0;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}

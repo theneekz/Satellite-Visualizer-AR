@@ -1,0 +1,165 @@
+.satellite-card {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 300px;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow-y: auto;
+  text-align: left;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #fff;
+  background: rgba(10, 12, 24, 0.6);
+  backdrop-filter: blur(6px);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.satellite-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.satellite-card__name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.satellite-card__sub {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.satellite-card__close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.8);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.satellite-card__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.satellite-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.satellite-card__badge {
+  display: inline-block;
+  padding: 2px 8px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+
+.satellite-card__badge--type {
+  color: #9fe1cb;
+  background: rgba(29, 158, 117, 0.22);
+}
+
+.satellite-card__badge--fresh {
+  color: #c0dd97;
+  background: rgba(99, 153, 34, 0.25);
+}
+
+.satellite-card__badge--aging {
+  color: #fac775;
+  background: rgba(186, 117, 23, 0.25);
+}
+
+.satellite-card__badge--stale {
+  color: #f7c1c1;
+  background: rgba(226, 75, 74, 0.25);
+}
+
+.satellite-card__section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.satellite-card__label {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.satellite-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+.satellite-card__diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.satellite-card__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 10px;
+  padding: 0;
+  list-style: none;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.satellite-card__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.satellite-card__legend-item::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--dot);
+  border-radius: 50%;
+}
+
+.satellite-card__legend-item--perigee {
+  --dot: #5dcaa5;
+}
+
+.satellite-card__legend-item--apogee {
+  --dot: #ef9f27;
+}
+
+.satellite-card__epoch {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.satellite-card__key {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.satellite-card__value {
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+// Static display info for one OMM record.
+message OMM {
+  uint32 id = 1;              // NORAD_CAT_ID
+  string name = 2;            // OBJECT_NAME
+  string designator = 3;      // OBJECT_ID
+  int64 epoch_ms = 4;         // EPOCH as UTC unix milliseconds
+  double period_min = 5;
+  double inclination_deg = 6;
+  double eccentricity = 7;
+  double perigee_km = 8;
+  double apogee_km = 9;
+  double mean_motion = 10;    // rev/day
+  double raan_deg = 11;       // RA_OF_ASC_NODE
+  double arg_perigee_deg = 12;  // ARG_OF_PERICENTER
+  double mean_anomaly_deg = 13;
+  double bstar = 14;
+  uint32 rev_at_epoch = 15;
+
+  // Optional: not present in every OMM source.
+  optional string object_type = 16;
+  optional string rcs = 17;
+  optional string originator = 18;
+}
+
+// Response shape of /v1/satellites.
+message OMMList {
+  repeated OMM satellites = 1;
+}
