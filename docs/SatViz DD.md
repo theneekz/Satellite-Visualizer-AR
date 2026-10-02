@@ -51,7 +51,7 @@ The data currently comes from a Spacebook OMM snapshot (`spacebook_omm_2026-09-2
 
 ### Database
 
-PostgreSQL (local `satviz` database by default; override with `DATABASE_URL`). `db/schema.sql` defines one `satellites` table with one row per object, keyed by NORAD id, holding its latest element set. Column names are the OMM keywords in lowercase, so `database.read_omm_records` maps each row straight back to the OMM dict that sgp4 and `build_metadata` already consume. Elements are DOUBLE PRECISION so values round-trip exactly (verified: identical metadata and bit-identical SGP4 output versus the JSON file). Postgres formats EPOCH back into OMM's string form during the query, which keeps the read as fast as parsing the JSON.
+PostgreSQL (local `satviz` database by default; override with `DATABASE_URL`). `db/schema.sql` defines one `satellites` table with one row per object, keyed by NORAD id, holding its latest element set. Column names are the OMM keywords in lowercase, so `database.read_omm_records` maps each row straight back to the OMM dict that sgp4 and `build_omm_proto` consume. Elements are DOUBLE PRECISION so values round-trip exactly (verified: identical metadata and bit-identical SGP4 output versus the JSON file). Postgres formats EPOCH back into OMM's string form during the query, which keeps the read as fast as parsing the JSON.
 
 `python -m db.import_omm [file]` (run from backend/) applies the schema and upserts an OMM JSON file by NORAD id, so re-importing a newer snapshot replaces older element sets. A scheduled CelesTrak refresh would write through the same upsert. Element set history and the satcat join (country, launch data) are not modeled yet.
 
