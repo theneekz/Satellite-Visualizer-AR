@@ -12,7 +12,7 @@ from skyfield.api import load
 from skyfield.sgp4lib import TEME
 from logger import time_function, log_error
 from protos import omm_pb2
-from database import read_omm_records
+from db.database import read_omm_records
 import json
 import gzip
 
