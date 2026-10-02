@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from database import OMM_COLUMNS, connect
+from db.database import OMM_COLUMNS, connect
 from logger import log, time_function
 
 DEFAULT_FILE = "spacebook_omm_2026-09-21.json"
