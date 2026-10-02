@@ -30,6 +30,10 @@ Precession and nutation are not applied to the Earth mesh, so satellites appear 
 
 Clicking picks the nearest visible satellite on the CPU (projected distance plus an Earth occlusion test). Selecting a satellite enables a follow mode that keeps it in view until the user drags.
 
+### Three.js Comparison Renderer
+
+`?renderer=three` swaps in `components/three/GlobeThree`, a Three.js port with the same props and behavior (camera, follow, picking, Sun lighting, instanced satellites), so the two can be compared on the same data. It is lazy-loaded, so the default page never downloads Three.js (about 250KB gzipped). It uses `WebGPURenderer`, which runs on WebGPU when available and falls back to WebGL 2 otherwise; the active backend is shown on screen. Shaders are written in TSL (Three's shading language), which compiles to WGSL or GLSL, and that is what makes the fallback possible. Its render loop uses `setAnimationLoop`, the hook a WebXR session drives, as groundwork for a VR mode.
+
 ### React UI Layer
 
 - SatelliteList: virtualized with @tanstack/react-virtual using fixed 34px rows, so only about 40 rows are in the DOM regardless of list size. Selection scrolls by index.
@@ -71,7 +75,7 @@ N/A
 
 ## Dependencies
 
-- Frontend: React, WebGPU, @bufbuild/protobuf (with protoc-gen-es for codegen), @tanstack/react-virtual
+- Frontend: React, WebGPU, @bufbuild/protobuf (with protoc-gen-es for codegen), @tanstack/react-virtual, three (comparison renderer)
 - Backend: FastAPI, uvicorn, sgp4, Skyfield, numpy, protobuf, psycopg 3
 - Data: PostgreSQL, loaded from a Spacebook OMM snapshot (CelesTrak planned)
 - Tooling: protoc for generating Python and TypeScript code from `shared/omm.proto`

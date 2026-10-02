@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { getSatellites, type SatelliteInfo } from "./api/satellites";
 import Globe from "./components/Globe";
 import SatelliteCard from "./components/SatelliteCard";
@@ -12,6 +12,12 @@ import {
   type SatelliteFilters,
 } from "./filters";
 import { usePositionsPolling } from "./hooks/usePositionsPolling";
+
+// ?renderer=three swaps in the Three.js globe to compare it with the hand-written WebGPU one.
+// It is code-split, so the default page never downloads Three.js.
+const GlobeThree = lazy(() => import("./components/three/GlobeThree"));
+const USE_THREE =
+  new URLSearchParams(window.location.search).get("renderer") === "three";
 
 function App() {
   const [satellites, setSatellites] = useState<SatelliteInfo[]>([]);
@@ -80,12 +86,27 @@ function App() {
           onReset={resetFilters}
         />
       </SatelliteList>
-      <Globe
-        positionsRef={positionsRef}
-        visibleIds={visibleIds}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-      />
+      {USE_THREE ? (
+        <Suspense fallback={null}>
+          <GlobeThree
+            positionsRef={positionsRef}
+            visibleIds={visibleIds}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        </Suspense>
+      ) : (
+        <Globe
+          positionsRef={positionsRef}
+          visibleIds={visibleIds}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
+      )}
+      {/* A full reload, so each renderer starts from a clean GPU context. */}
+      <a className="renderer-switch" href={USE_THREE ? "?" : "?renderer=three"}>
+        {USE_THREE ? "Use WebGPU renderer" : "Use Three.js renderer"}
+      </a>
       {selected && (
         <SatelliteCard
           satellite={selected}

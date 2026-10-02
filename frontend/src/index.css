@@ -7,3 +7,30 @@ body {
   margin: 0;
   text-align: center;
 }
+
+/* Renderer comparison controls, centered at the bottom between the list and the card. */
+.renderer-switch,
+.renderer-backend {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  color: #fff;
+  background: rgba(10, 12, 24, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.renderer-switch {
+  text-decoration: none;
+}
+
+/* The active backend sits just above the switch. */
+.renderer-backend {
+  bottom: 44px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
