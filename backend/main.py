@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Response
+from dataclasses import dataclass
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 import math
 import os
 from datetime import datetime, timezone
-from typing import List, cast
+from typing import List, Optional, cast
 import numpy as np
 from sgp4.api import Satrec, SatrecArray
 from sgp4 import omm
@@ -15,12 +16,13 @@ from protos import omm_pb2
 from db.database import read_omm_records
 import json
 import gzip
+import hashlib
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Build the caches once before serving, so no request sees (or races to fill) an empty cache.
-    load_v2_cache()
+    # Build the dataset once before serving, so no request sees (or races to fill) an empty cache.
+    app.state.dataset = load_dataset()
     yield
 
 
@@ -36,30 +38,58 @@ app.add_middleware(
 EARTH_RADIUS_KM = 6378.137
 EARTH_MU = 398600.4418  # km^3/s^2
 
-# Every satellite as one vectorized SGP4 array; sat_ids[i] is the NORAD id of satrecs[i].
-satrecs: SatrecArray = SatrecArray([])
-sat_ids = np.array([], dtype=np.int64)
-cached_records = []
-# Compressed once per cache load so requests don't pay for gzip.
-cached_omms_gz = b""
+
+@dataclass(frozen=True)
+class Dataset:
+    """Everything the endpoints serve, derived from one load of the OMM records.
+
+    Immutable: a reload builds a new Dataset and replaces app.state.dataset in one assignment,
+    so a request always sees one consistent version, never new satrecs with old ids.
+    """
+    # Hash of the satellites payload: identical records give the same version on every server.
+    version: str
+    # Every satellite as one vectorized SGP4 array; sat_ids[i] is the NORAD id of satrecs[i].
+    satrecs: SatrecArray
+    sat_ids: np.ndarray
+    # The /v2/satellites body: a gzipped protobuf OMMList, compressed once so requests don't pay.
+    satellites_gz: bytes
+
+    @property
+    def etag(self) -> str:
+        return f'"{self.version}"'
 
 
 @time_function
-def build_omm_protos():
-    global cached_omms_gz
-    if not cached_records:
-        return
+def load_dataset() -> Optional[Dataset]:
+    """Reads the OMM records and builds a Dataset, or None if the database can't be read."""
+    try:
+        records = read_omm_records()
+    except Exception as e:
+        log_error('error reading OMM records from the database:', e)
+        return None
+    satrecs, sat_ids = build_satrecs(records)
+    satellites = build_omm_protos(records)
+    return Dataset(
+        version=hashlib.sha256(satellites).hexdigest()[:16],
+        satrecs=satrecs,
+        sat_ids=sat_ids,
+        # mtime=0 keeps the bytes deterministic; gzip otherwise embeds the current time.
+        satellites_gz=gzip.compress(satellites, 6, mtime=0),
+    )
 
+
+@time_function
+def build_omm_protos(records: List[dict]) -> bytes:
+    """The serialized protobuf OMMList for every record that can be parsed."""
     omm_list = omm_pb2.OMMList()
-    for record in cached_records:
+    for record in records:
         # Filled in place: no intermediate dict or copy per satellite.
         if not build_omm_proto(omm_list.satellites.add(), record):
             # Drop the partly filled message for a record that couldn't be parsed.
             log("deleted a partly filled message")
             del omm_list.satellites[-1]
 
-    cached_omms = omm_list.SerializeToString()
-    cached_omms_gz = gzip.compress(cached_omms, 6)
+    return omm_list.SerializeToString()
 
 
 def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
@@ -104,43 +134,28 @@ def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
 
 
 @time_function
-def load_v2_cache():
-    global cached_records
-    try:
-        cached_records = read_omm_records()
-    except Exception as e:
-        # Leave the caches empty.
-        log_error('error reading OMM records from the database:', e)
-        return
-    update_satrecs(load.timescale())
-    build_omm_protos()
-
-
-@time_function
-def update_satrecs(ts):
-    global cached_records, satrecs, sat_ids
-
+def build_satrecs(records: List[dict]) -> tuple[SatrecArray, np.ndarray]:
+    """One SGP4 Satrec per record, as a vectorized array plus the matching NORAD ids."""
     temp_satrecs = []
     temp_sat_ids = []
 
-    for record in cached_records:
+    for record in records:
         satrec = Satrec()
         omm.initialize(satrec, record)
         temp_satrecs.append(satrec)
         temp_sat_ids.append(satrec.satnum)
 
-    satrecs = SatrecArray(temp_satrecs)
-    sat_ids = np.array(temp_sat_ids)
+    return SatrecArray(temp_satrecs), np.array(temp_sat_ids)
 
 
 @time_function
-def build_positions(t):
+def build_positions(dataset: Dataset, t):
     # Skyfield's pre-split arrays gives 100% precision with zero math overhead
     julian_date_array = np.array([t.whole])
     offset_array = np.array([t.ut1_fraction])
 
     # One SGP4 call for every satellite at this instant.
-    errors_2d, position, velocity = satrecs.sgp4(
+    errors_2d, position, velocity = dataset.satrecs.sgp4(
         julian_date_array, offset_array)
 
     # Optimize filtering by dropping the time dimension immediately [:, 0]
@@ -177,7 +192,7 @@ def build_positions(t):
     rotation = TEME.rotation_at(t)
     pos = pos_2d[ok] @ rotation
     vel = vel_2d[ok] @ rotation
-    valid_ids = sat_ids[ok]
+    valid_ids = dataset.sat_ids[ok]
 
     return build_position_byte_list(valid_ids, pos, vel)
 
@@ -188,35 +203,55 @@ def build_position_byte_list(ids, pos, vel):
             + np.hstack([pos, vel]).astype("<f4").tobytes())
 
 
+def etag_matches(request: Request, etag: str) -> bool:
+    """Whether the client already names this ETag so it can reuse it."""
+    header = request.headers.get("if-none-match")
+    if not header:
+        return False
+    # A comma-separated list; weak validators (W/"...") still count for a GET.
+    candidates = {tag.strip().removeprefix("W/") for tag in header.split(",")}
+    return "*" in candidates or etag in candidates
+
+
 @app.get("/v2/satellites")
 @time_function
-def get_satellites_v2():
-    if not cached_omms_gz:
+def get_satellites_v2(request: Request):
+    dataset: Optional[Dataset] = request.app.state.dataset
+    if dataset is None:
         return Response(status_code=503, content="Satellite cache not loaded")
+
+    # no-cache: browsers and CDNs may store the payload but must revalidate each time. While the
+    # dataset is unchanged that costs a 304 with no body instead of the full payload.
+    headers = {"ETag": dataset.etag, "Cache-Control": "public, no-cache"}
+    if etag_matches(request, dataset.etag):
+        return Response(status_code=304, headers=headers)
     return Response(
-        content=cached_omms_gz,
+        content=dataset.satellites_gz,
         media_type="application/x-protobuf",
-        headers={"Content-Encoding": "gzip"})
+        headers={**headers, "Content-Encoding": "gzip"})
 
 
 @app.get("/v2/positions")
 @time_function
-def get_positions_v2():
-    if not len(satrecs):
+def get_positions_v2(request: Request):
+    dataset: Optional[Dataset] = request.app.state.dataset
+    if dataset is None:
         return Response(status_code=503, content="Satellite cache not loaded")
 
     ts = load.timescale()
     t = ts.now()
     time = cast(datetime, t.utc_datetime())
     millis = time.timestamp() * 1000
-    positions = build_positions(t)
+    positions = build_positions(dataset, t)
 
     return Response(
         content=bytes(positions),
         media_type="application/octet-stream",
         headers={
             "X-Timescale": str(millis),
-            "Access-Control-Expose-Headers": "X-Timescale"
+            "Access-Control-Expose-Headers": "X-Timescale",
+            # Positions are never cached (yet).
+            "Cache-Control": "no-store",
         }
     )
 

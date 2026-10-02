@@ -40,14 +40,16 @@ Clicking picks the nearest visible satellite on the CPU (projected distance plus
 
 ### Startup and Caching
 
-A FastAPI lifespan hook runs `load_v2_cache` before the server accepts requests (about 1.5s): read every OMM record from PostgreSQL (about 0.45s), build one sgp4 `Satrec` per record with `sgp4.omm.initialize` into a `SatrecArray`, and build the gzipped protobuf payload. Building once at startup prevents concurrent first requests from each rebuilding the cache. If the database is unreachable the error is logged, the server still starts, and endpoints return 503.
+A FastAPI lifespan hook runs `load_dataset` before the server accepts requests (about 1.5s): read every OMM record from PostgreSQL (about 0.45s), build one sgp4 `Satrec` per record with `sgp4.omm.initialize` into a `SatrecArray`, and build the gzipped protobuf payload. Building once at startup prevents concurrent first requests from each rebuilding the cache. If the database is unreachable the error is logged, the server still starts, and endpoints return 503.
+
+The result is one immutable `Dataset` (version, satrecs, sat_ids, satellites_gz) stored on `app.state.dataset`; there are no module-level caches. A future reload builds a new `Dataset` and replaces it in one assignment, so a request never sees a mix of old and new data. The version is a hash of the satellites payload, and gzip runs with `mtime=0`, so every server or worker that loads the same records produces identical bytes and the same version. Each uvicorn worker and each server still builds its own `Dataset`, since sgp4 objects live in process memory.
 
 The data currently comes from a Spacebook OMM snapshot (`spacebook_omm_2026-09-21.json`, 32,510 records) imported into the database. The live CelesTrak fetch is disabled until API usage is secured.
 
 ### API Endpoints
 
-- GET /v2/satellites: static metadata as a protobuf `OMMList` (`shared/omm.proto`), gzipped once at startup and served with `Content-Encoding: gzip`. About 2.8MB compressed (5MB raw).
-- GET /v2/positions: computed per request in about 30ms. One vectorized SGP4 call for all satellites at the current time, failed or non-finite results dropped, TEME rotated to GCRS with a single matrix multiply. The body is `[ids: uint32 x n][state: float32 x 6n]`, little-endian, 28 bytes per satellite (about 0.87MB), with the snapshot time in the `X-Timescale` header. Not compressed, since float data only shrinks about 7% under gzip.
+- GET /v2/satellites: static metadata as a protobuf `OMMList` (`shared/omm.proto`), gzipped once at startup and served with `Content-Encoding: gzip`. About 2.8MB compressed (5MB raw). Sent with the dataset version as its `ETag` and `Cache-Control: public, no-cache`, so browsers (and any CDN) keep a copy and revalidate; an unchanged dataset answers `304 Not Modified` with no body. The frontend's `fetch` gets this from the browser HTTP cache with no code changes.
+- GET /v2/positions: computed per request in about 30ms. One vectorized SGP4 call for all satellites at the current time, failed or non-finite results dropped, TEME rotated to GCRS with a single matrix multiply. The body is `[ids: uint32 x n][state: float32 x 6n]`, little-endian, 28 bytes per satellite (about 0.87MB), with the snapshot time in the `X-Timescale` header and `Cache-Control: no-store`. Not compressed, since float data only shrinks about 7% under gzip.
 
 ### Database
 
