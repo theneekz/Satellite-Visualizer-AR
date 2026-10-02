@@ -100,6 +100,10 @@ function buildSphere(radius: number, latBands: number, lonBands: number) {
 
 // How quickly the camera turns toward a selected satellite (higher is snappier).
 const FOLLOW_RATE = 6;
+// On selection, the camera zooms out (if needed) to at least this many times the satellite's
+// distance from the globe's center. Following puts the satellite between the camera and the
+// globe, so a closer camera would leave a far satellite behind it.
+const FRAMING_DISTANCE_FACTOR = 1.5;
 
 // The far clip plane sits this far (in Earth radii) beyond the globe's center. The farthest
 // catalogued object reaches about 84 (a 526,000 km apogee), so nothing gets clipped.
@@ -297,6 +301,9 @@ function Globe({
       let pitch = 0;
       // While true, the camera turns to keep the selected satellite centered.
       let following = false;
+      // While true, the zoom eases out until the newly selected satellite is far enough in front of
+      // the camera; cleared once it gets there or the user scrolls.
+      let framing = false;
       let lastSelectedId: number | null = null;
       let dragging = false;
       let lastX = 0;
@@ -329,6 +336,13 @@ function Globe({
         // Clicking a satellite (even the already selected one) re-centers on it; clicking
         // empty space clears the selection.
         if (id !== null) following = true;
+        // The satellite is already on screen, so keep the zoom: marking the selection as seen
+        // stops the frame loop from zooming out for it (that is only for list selections). The
+        // ref is updated now too; otherwise frames before React re-renders still see the old
+        // selection, treat it as a change, and swing the camera back toward it.
+        selectedIdRef.current = id;
+        lastSelectedId = id;
+        framing = false;
         onSelectRef.current(id);
       }
 
@@ -386,6 +400,7 @@ function Globe({
 
       function handleWheel(e: WheelEvent) {
         e.preventDefault();
+        framing = false;
         zoomPercent -= e.deltaY * ZOOM_SENSITIVITY;
         zoomPercent = Math.min(
           ZOOM_MAX_PERCENT,
@@ -450,7 +465,7 @@ function Globe({
         const selected = selectedIdRef.current;
         if (selected !== lastSelectedId) {
           lastSelectedId = selected;
-          following = selected !== null;
+          following = framing = selected !== null;
         }
         if (following && selected !== null) {
           const target = satellite.scenePosition(selected);
@@ -462,6 +477,18 @@ function Globe({
             const k = 1 - Math.exp(-Math.min(frameDt, 0.1) * FOLLOW_RATE);
             yaw += wrapAngle(targetYaw - yaw) * k;
             pitch += wrapAngle(targetPitch - pitch) * k;
+            // Zoom out (never in) after a selection, eased in log space so large changes feel even.
+            if (framing) {
+              const minDistance = Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
+              // Inverts the camera distance formula below.
+              const frameZoom = Math.max(
+                ZOOM_MIN_PERCENT,
+                (BASE_DISTANCE * 100) / (minDistance * Math.min(1, canvas!.width / canvas!.height))
+              );
+              const targetZoom = Math.min(zoomPercent, frameZoom);
+              zoomPercent *= (targetZoom / zoomPercent) ** k;
+              if (Math.abs(Math.log(targetZoom / zoomPercent)) < 0.01) framing = false;
+            }
           }
         }
 
