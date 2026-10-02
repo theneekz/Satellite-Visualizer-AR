@@ -9,12 +9,15 @@ import {
 import type { PositionsSnapshot } from "../api/satellites";
 import { createSatelliteRenderer } from "./satellite";
 import { earthRotationAngle } from "./earthRotation";
+import { sunDirection } from "./sun";
 import earthTextureUrl from "../assets/earth.jpg";
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
     mvp: mat4x4f,
     model: mat4x4f,
+    // Direction toward the Sun in the same (camera-rotated) space as the transformed normals.
+    sunDir: vec4f,
   }
   @group(0) @binding(0) var<uniform> uniforms: Uniforms;
   @group(0) @binding(1) var earthTexture: texture_2d<f32>;
@@ -43,11 +46,14 @@ const SHADER_SOURCE = /* wgsl */ `
 
   @fragment
   fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let lightDir = normalize(vec3f(0.5, 0.7, 1.0));
-    let diffuse = max(dot(normalize(input.normal), lightDir), 0.0);
+    let sunAlignment = dot(normalize(input.normal), uniforms.sunDir.xyz);
+    // Soft terminator: blends from the night side into daylight across a narrow band.
+    let daylight = smoothstep(-0.1, 0.15, sunAlignment);
+    let dayShade = 0.35 + 0.65 * max(sunAlignment, 0.0);
+    // The night side stays faintly visible so the texture can still be made out.
+    let brightness = mix(0.12, dayShade, daylight);
     let texColor = textureSample(earthTexture, earthSampler, input.uv);
-    let color = texColor.rgb * (0.3 + diffuse * 0.7);
-    return vec4f(color, 1.0);
+    return vec4f(texColor.rgb * brightness, 1.0);
   }
 `;
 
@@ -185,9 +191,9 @@ function Globe({
       });
       device.queue.writeBuffer(indexBuffer, 0, indices);
 
-      // Two mat4x4<f32> (mvp, model), 64 bytes each.
+      // Two mat4x4<f32> (mvp, model), 64 bytes each, then a vec4f sun direction (16 bytes).
       const uniformBuffer = device.createBuffer({
-        size: 128,
+        size: 144,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
 
@@ -275,7 +281,7 @@ function Globe({
         0.1,
         100
       );
-      const mvpUniform = new Float32Array(32);
+      const mvpUniform = new Float32Array(36);
 
       // Click-and-drag to rotate: yaw spins the globe about its polar axis and pitch tilts it
       // about the screen's horizontal axis. Neither is limited, so the poles can be brought
@@ -474,6 +480,14 @@ function Globe({
         const earthMvp = multiply(multiply(projection, view), earthModel);
         mvpUniform.set(earthMvp, 0);
         mvpUniform.set(earthModel, 16);
+        // The Sun is inertial like the satellites: same GCRS -> world axis swap as the satellite
+        // shader, then only the camera rotation (not the Earth's spin).
+        const [sx, sy, sz] = sunDirection(satellite.simTime());
+        const sunWorld = [sx, sz, -sy];
+        for (let row = 0; row < 3; row++) {
+          mvpUniform[32 + row] =
+            model[row] * sunWorld[0] + model[4 + row] * sunWorld[1] + model[8 + row] * sunWorld[2];
+        }
         device.queue.writeBuffer(uniformBuffer, 0, mvpUniform);
         satellite.update(mvp, canvas!.width, canvas!.height);
 
