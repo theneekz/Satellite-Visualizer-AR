@@ -50,8 +50,8 @@ const SHADER_SOURCE = /* wgsl */ `
     // Soft terminator: blends from the night side into daylight across a narrow band.
     let daylight = smoothstep(-0.1, 0.15, sunAlignment);
     let dayShade = 0.35 + 0.65 * max(sunAlignment, 0.0);
-    // The night side stays faintly visible so the texture can still be made out.
-    let brightness = mix(0.12, dayShade, daylight);
+    // The night side is dimmed but stays clearly readable so the surface can still be made out.
+    let brightness = mix(0.8, dayShade, daylight);
     let texColor = textureSample(earthTexture, earthSampler, input.uv);
     return vec4f(texColor.rgb * brightness, 1.0);
   }
@@ -100,6 +100,19 @@ function buildSphere(radius: number, latBands: number, lonBands: number) {
 
 // How quickly the camera turns toward a selected satellite (higher is snappier).
 const FOLLOW_RATE = 6;
+
+// The far clip plane sits this far (in Earth radii) beyond the globe's center. The farthest
+// catalogued object reaches about 84 (a 526,000 km apogee), so nothing gets clipped.
+const FAR_MARGIN = 100;
+
+/**
+ * Clip planes that scale with the camera distance: far always reaches past the farthest object,
+ * and near grows with it so depth precision stays fine enough to keep low satellites from
+ * flickering against the globe when zoomed far out.
+ */
+function clipPlanes(distance: number) {
+  return { near: distance / 100, far: distance + FAR_MARGIN };
+}
 
 /** Wraps an angle difference into [-PI, PI] so the camera turns the short way around. */
 function wrapAngle(angle: number) {
@@ -275,12 +288,6 @@ function Globe({
       });
       let depthView = depthTexture.createView();
 
-      let projection = perspective(
-        (45 * Math.PI) / 180,
-        canvas!.width / canvas!.height,
-        0.1,
-        100
-      );
       const mvpUniform = new Float32Array(36);
 
       // Click-and-drag to rotate: yaw spins the globe about its polar axis and pitch tilts it
@@ -337,7 +344,9 @@ function Globe({
       function handlePointerMove(e: PointerEvent) {
         if (!dragging) return;
         // Dragging the globe hands control back to the user.
-        if (Math.hypot(e.clientX - downX, e.clientY - downY) >= CLICK_MAX_MOVE_PX) {
+        if (
+          Math.hypot(e.clientX - downX, e.clientY - downY) >= CLICK_MAX_MOVE_PX
+        ) {
           following = false;
         }
         const dx = e.clientX - lastX;
@@ -370,7 +379,7 @@ function Globe({
       // Scroll-to-zoom: camera distance from the globe, clamped to a sensible range.
       // zoomPercent 100 = default distance; higher = zoomed in (closer), lower = zoomed out.
       const BASE_DISTANCE = 3;
-      const ZOOM_MIN_PERCENT = 50;
+      const ZOOM_MIN_PERCENT = 1;
       const ZOOM_MAX_PERCENT = 300;
       const ZOOM_SENSITIVITY = 0.1;
       let zoomPercent = 100;
@@ -386,12 +395,12 @@ function Globe({
 
       canvas!.addEventListener("wheel", handleWheel, { passive: false });
 
-      // Recreate the depth texture (WebGPU textures don't auto-resize) and recompute the
-      // projection's aspect ratio whenever the window resizes. The canvas is always kept
-      // square, so aspect is always 1, but we recompute from the live size regardless.
+      // Recreate the depth texture whenever the window resizes (WebGPU textures don't
+      // auto-resize). The projection is rebuilt every frame from the live size and zoom.
       function handleResize() {
         const size = computeSize();
-        if (canvas!.width === size.width && canvas!.height === size.height) return;
+        if (canvas!.width === size.width && canvas!.height === size.height)
+          return;
 
         canvas!.width = size.width;
         canvas!.height = size.height;
@@ -405,13 +414,6 @@ function Globe({
           usage: GPUTextureUsage.RENDER_ATTACHMENT,
         });
         depthView = depthTexture.createView();
-
-        projection = perspective(
-          (45 * Math.PI) / 180,
-          canvas!.width / canvas!.height,
-          0.1,
-          100
-        );
       }
 
       window.addEventListener("resize", handleResize);
@@ -426,7 +428,10 @@ function Globe({
         // Re-upload when a new poll arrives or the filter changes.
         const snapshot = positionsRef.current;
         const visible = visibleIdsRef.current;
-        if (snapshot && (snapshot !== lastSnapshot || visible !== lastVisibleIds)) {
+        if (
+          snapshot &&
+          (snapshot !== lastSnapshot || visible !== lastVisibleIds)
+        ) {
           lastSnapshot = snapshot;
           lastVisibleIds = visible;
           satellite.setPositions(snapshot, visible);
@@ -465,6 +470,8 @@ function Globe({
         const aspect = canvas!.width / canvas!.height;
         const distance =
           (BASE_DISTANCE * (100 / zoomPercent)) / Math.min(1, aspect);
+        const { near, far } = clipPlanes(distance);
+        const projection = perspective((45 * Math.PI) / 180, aspect, near, far);
         const view = translation(0, 0, -distance);
         const model = multiply(rotationX(pitch), rotationY(yaw));
         // Satellites live in the inertial frame, so they only get the camera rotation (`model`).
@@ -486,7 +493,9 @@ function Globe({
         const sunWorld = [sx, sz, -sy];
         for (let row = 0; row < 3; row++) {
           mvpUniform[32 + row] =
-            model[row] * sunWorld[0] + model[4 + row] * sunWorld[1] + model[8 + row] * sunWorld[2];
+            model[row] * sunWorld[0] +
+            model[4 + row] * sunWorld[1] +
+            model[8 + row] * sunWorld[2];
         }
         device.queue.writeBuffer(uniformBuffer, 0, mvpUniform);
         satellite.update(mvp, canvas!.width, canvas!.height);
