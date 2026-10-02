@@ -12,13 +12,14 @@ from skyfield.api import load
 from skyfield.sgp4lib import TEME
 from logger import time_function, log_error
 from protos import omm_pb2
+from database import read_omm_records
 import json
 import gzip
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Build the v2 caches once before serving, so no request sees (or races to fill) an empty cache.
+    # Build the caches once before serving, so no request sees (or races to fill) an empty cache.
     load_v2_cache()
     yield
 
@@ -32,15 +33,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# CACHE_FILE_JSON = "dummy_data.json"
-CACHE_FILE_JSON = "spacebook_omm_2026-09-21.json"
 EARTH_RADIUS_KM = 6378.137
 EARTH_MU = 398600.4418  # km^3/s^2
 
 # Every satellite as one vectorized SGP4 array; sat_ids[i] is the NORAD id of satrecs[i].
+satrecs: SatrecArray = SatrecArray([])
 sat_ids = np.array([], dtype=np.int64)
 cached_records = []
-satrecs: SatrecArray = SatrecArray([])
 # Compressed once per cache load so requests don't pay for gzip.
 cached_omms_gz = b""
 
@@ -102,18 +101,14 @@ def build_metadata(record: dict) -> dict:
 @time_function
 def load_v2_cache():
     global cached_records
-    cached_records = read_station_data()
+    try:
+        cached_records = read_omm_records()
+    except Exception as e:
+        # Leave the caches empty.
+        log_error('error reading OMM records from the database:', e)
+        return
     update_satrecs(load.timescale())
     build_omm_protos()
-
-
-# Until API usage is secured, read stale file
-@time_function
-def read_station_data() -> List[dict]:
-    if os.path.exists(CACHE_FILE_JSON):
-        with open(CACHE_FILE_JSON) as f:
-            return json.load(f)
-    return []
 
 
 @time_function
@@ -124,7 +119,6 @@ def update_satrecs(ts):
     temp_sat_ids = []
 
     for record in cached_records:
-        # Same Satrec Skyfield builds, without the EarthSatellite wrapper (~2x faster).
         satrec = Satrec()
         omm.initialize(satrec, record)
         temp_satrecs.append(satrec)

@@ -2,47 +2,66 @@
 
 # Overview
 
-A full-stack web app for visualizing Near Earth Objects (NEOs) and satellites in real-time. Users can explore what's orbiting Earth, track satellites live, and learn about orbital mechanics through an interactive 3D experience.
+A full-stack web app for exploring the roughly 32k objects orbiting Earth in real time on an interactive 3D globe, with search, filtering, and per-satellite details that help explain orbital mechanics.
 
 # Detailed Design
 
 ## Architecture Overview
 
-Frontend renders an interactive 3D globe using WebGPU for high-performance GPU rendering (10k+ satellites at 60 FPS). React handles UI controls and panels. Python backend fetches OMM data from CelesTrak, performs orbital calculations using skyfield library, and serves satellite positions via REST API. All positions are served in the GCRS inertial frame; the frontend rotates the Earth mesh to match the current time. PostgreSQL will cache OMM records in V2.
+The frontend is React + TypeScript (Vite) with a hand-written WebGPU renderer for the globe and satellites. The backend is Python + FastAPI, using sgp4 for vectorized propagation and Skyfield for the TEME to GCRS frame rotation, with OMM element sets stored in PostgreSQL. At startup the backend reads every element set from the database and builds every cache once; it then serves two binary endpoints: static satellite metadata as gzipped protobuf, and current positions as a packed typed-array buffer. Positions are in the GCRS inertial frame and the frontend rotates the Earth mesh to match the time.
 
 ## Frontend
 
-### WebGPU Rendering Pipeline
-High-performance 3D visualization using WebGPU instead of Three.js. This gives direct GPU control, enabling 10-100x faster rendering. The visualizer displays Earth as a sphere, satellite positions as points, and orbital paths as lines. Camera is freely rotatable and zoomable.
+### Data Loading
 
-Satellites and orbital paths are drawn directly in GCRS (inertial) coordinates, so orbits render as stable closed ellipses. The Earth mesh is the only object that rotates: each frame the frontend rotates it about the Z axis by the Earth Rotation Angle (ERA) for the current time. ERA is computed client-side from the UTC timestamp (treating UT1 as UTC, which is accurate to well under a degree and sufficient for visualization) using ERA = 2π(0.7790572732640 + 1.00273781191135448 × (JD − 2451545.0)). Polar motion and nutation are ignored. LOD (level of detail) culling keeps performance smooth even with 10k+ objects.
+`api/satellites.ts` owns both endpoints. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` via `npm run ts-proto`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. Satellites load once on mount.
+
+`getPositions` fetches `/v2/positions` and creates `Uint32Array` (ids) and `Float32Array` (x, y, z, vx, vy, vz per satellite) views directly onto the response, with no per-satellite objects. It builds an `indexById` map once per poll. `PositionsSnapshot` is `{ t, ids, state, indexById }`. Positions are polled every 30 seconds and held in a ref, so polling never triggers React renders.
+
+Both effects use an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
+
+### WebGPU Rendering Pipeline
+
+The globe is a procedurally built UV sphere with an Earth texture, rotated each frame by the Earth Rotation Angle (ERA) computed client-side from UTC (UT1 approximated by UTC). Satellites are instanced quads: the instance buffer holds each satellite's polled GCRS position and velocity, and the vertex shader extrapolates in a straight line by the time since the snapshot. This is accurate to a few km over a 30 second poll interval, and each poll re-anchors it. When no filter is active, the snapshot's state block is uploaded to the GPU as-is because its layout matches the instance buffer.
+
+The globe is lit by the real Sun: `sun.ts` computes the Sun's direction from the simulated time with the Astronomical Almanac's low-precision formula (about 0.01 degrees), and the globe shader shades a day side, a soft terminator, and a dim night side. The Sun direction gets the same GCRS to world axis swap and camera rotation as the satellites, but not the Earth's spin.
+
+Precession and nutation are not applied to the Earth mesh, so satellites appear about 0.37 degrees (roughly 44 km at LEO) off relative to the texture. This is accepted for visualization.
+
+Clicking picks the nearest visible satellite on the CPU (projected distance plus an Earth occlusion test). Selecting a satellite enables a follow mode that keeps it in view until the user drags.
 
 ### React UI Layer
-React components handle satellite search, filtering (by type/country/constellation), and info panels. State management keeps UI in sync with WebGPU rendering state. No three.js abstraction—React stays lightweight and separate from GPU rendering.
 
-### Key Data Structures
-Satellites receive: name, NORAD ID, current GCRS position (X, Y, Z in km), velocity, orbital period, satellite type, country of origin. Lat/lon/altitude are derived values used only for info panels. Orbital paths are computed by backend and streamed as GCRS X, Y, Z coordinate arrays (km). Every position response includes the UTC timestamp it was computed for, which the frontend uses for Earth rotation and interpolation between polls.
+- SatelliteList: virtualized with @tanstack/react-virtual using fixed 34px rows, so only about 40 rows are in the DOM regardless of list size. Selection scrolls by index.
+- SatelliteFilterBar: name/NORAD search, object type, RCS size, and launch year range, debounced 250ms. Filtering runs client-side over the full list and the globe draws only visible ids.
+- SatelliteCard: live altitude, speed, and lat/lon recomputed every second from the latest snapshot (`liveState.ts`, WGS84, same ERA as the globe), plus an orbit diagram and OMM details.
 
 ## Backend
 
-### OMM Data Management
-On startup, backend fetches OMM (Orbit Mean-Elements Message) XML from CelesTrak and caches in memory. Caches for 6 hours before re-fetching. The XML is parsed into field dictionaries with `sgp4.omm.parse_xml()`, and each dictionary is passed to Skyfield's `EarthSatellite.from_omm()`. OMM provides clean structured data (vs legacy TLE) and supports up to 9-digit satellite IDs. In-memory caching keeps V1 simple; database persistence deferred to V2.
+### Startup and Caching
 
-### Orbital Calculations
-Python backend uses Skyfield's native OMM support and SGP4 propagation model to compute satellite positions at any timestamp. OMM's structured format (vs legacy TLE) provides cleaner parsing and better data reliability. Calculations are done per-request for current position data. Skyfield converts SGP4's TEME output to GCRS, and the backend returns those position arrays (X, Y, Z in km) directly for the WebGPU rendering pipeline with no further frame conversion. Lat/lon/altitude for info panels come from Skyfield's `subpoint` on the same position. Orbital paths are produced by propagating one full orbital period at fixed time steps and returning the resulting GCRS positions.
+A FastAPI lifespan hook runs `load_v2_cache` before the server accepts requests (about 1.5s): read every OMM record from PostgreSQL (about 0.45s), build one sgp4 `Satrec` per record with `sgp4.omm.initialize` into a `SatrecArray`, and build the gzipped protobuf payload. Building once at startup prevents concurrent first requests from each rebuilding the cache. If the database is unreachable the error is logged, the server still starts, and endpoints return 503.
+
+The data currently comes from a Spacebook OMM snapshot (`spacebook_omm_2026-09-21.json`, 32,510 records) imported into the database. The live CelesTrak fetch is disabled until API usage is secured.
 
 ### API Endpoints
-GET /satellites (list all with current positions) | GET /satellites/:id (details and current state) | GET /earth-view (real-time position stream via WebSocket, optional for V1)
+
+- GET /v2/satellites: static metadata as a protobuf `OMMList` (`shared/omm.proto`), gzipped once at startup and served with `Content-Encoding: gzip`. About 2.8MB compressed (5MB raw).
+- GET /v2/positions: computed per request in about 30ms. One vectorized SGP4 call for all satellites at the current time, failed or non-finite results dropped, TEME rotated to GCRS with a single matrix multiply. The body is `[ids: uint32 x n][state: float32 x 6n]`, little-endian, 28 bytes per satellite (about 0.87MB), with the snapshot time in the `X-Timescale` header. Not compressed, since float data only shrinks about 7% under gzip.
 
 ### Database
 
-Deferred to V2. V1 uses in-memory caching for simplicity. V2 will add PostgreSQL for persistence, fallback when CelesTrak is unavailable, and FlatBuffers serialization for efficient position streaming.
+PostgreSQL (local `satviz` database by default; override with `DATABASE_URL`). `db/schema.sql` defines one `satellites` table with one row per object, keyed by NORAD id, holding its latest element set. Column names are the OMM keywords in lowercase, so `database.read_omm_records` maps each row straight back to the OMM dict that sgp4 and `build_metadata` already consume. Elements are DOUBLE PRECISION so values round-trip exactly (verified: identical metadata and bit-identical SGP4 output versus the JSON file). Postgres formats EPOCH back into OMM's string form during the query, which keeps the read as fast as parsing the JSON.
+
+`python -m db.import_omm [file]` (run from backend/) applies the schema and upserts an OMM JSON file by NORAD id, so re-importing a newer snapshot replaces older element sets. A scheduled CelesTrak refresh would write through the same upsert. Element set history and the satcat join (country, launch data) are not modeled yet.
 
 ## Security
 
+CORS allows GET requests from the Vite dev origin (localhost:5173) only. All data is public.
+
 ### Authorization
 
-N/A—this is a public tool. No user accounts or authentication required for MVP. All satellite data from CelesTrak is public domain.
+N/A. Public tool with no user accounts.
 
 ### Authentication
 
@@ -50,38 +69,49 @@ N/A
 
 ## Dependencies
 
-### Critical
-- **skyfield** (Python) – SGP4 orbital mechanics, OMM parsing via `EarthSatellite.from_omm()`
-- **sgp4** (Python) – OMM XML parsing via `sgp4.omm.parse_xml()`, and the low-level orbital calculations Skyfield uses internally
-- **CelesTrak API** – Free OMM (Orbit Mean-Elements Message) XML data source (celestrak.org)
-- **WebGPU** – Modern GPU API for web (Chrome 113+, Firefox future, Safari future)
-- **React** – UI framework
-- **FastAPI** (Python) – Web server
+- Frontend: React, WebGPU, @bufbuild/protobuf (with protoc-gen-es for codegen), @tanstack/react-virtual
+- Backend: FastAPI, uvicorn, sgp4, Skyfield, numpy, protobuf, psycopg 3
+- Data: PostgreSQL, loaded from a Spacebook OMM snapshot (CelesTrak planned)
+- Tooling: protoc for generating Python and TypeScript code from `shared/omm.proto`
 
-# Alternatives Considered
+# Alternatives considered
 
 ## Three.js vs WebGPU
-Three.js is simpler to learn but adds abstraction overhead and shader limits. WebGPU gives direct GPU control, enabling efficient culling and vastly better performance for 10k+ satellites. Trade-off: steeper learning curve for WebGPU. Decision: Use WebGPU to set this project apart and achieve true scalability.
 
-## Node.js vs Python Backend
-Node.js keeps the stack JavaScript end-to-end but orbital math libraries are better in Python. Python backend is more mature for SGP4 calculations. Trade-off: need to manage two languages. Decision: Python for orbital calculations (backend), Node.js or Python for API server depending on team comfort.
+Three.js is simpler but adds abstraction overhead. WebGPU gives direct control over instancing and buffers, which lets the polled position buffer go to the GPU without reshaping. Decision: WebGPU.
 
 ## GCRS vs ECEF Coordinate Frame
-ECEF (Earth-fixed) positions would let the frontend keep a static Earth mesh, but orbit paths become open ground-track spirals because the Earth rotates beneath them, which hides orbit shape, inclination, and plane. GCRS (inertial) keeps orbits as closed ellipses and matches the goal of teaching orbital mechanics. Trade-off: the frontend must rotate the Earth mesh by the Earth Rotation Angle each frame, and ground-track or lat/lon views need a conversion. Decision: Backend serves GCRS; frontend rotates the Earth.
 
-## Real-time Updates: Polling vs WebSocket
+ECEF would allow a static Earth mesh, but orbits would render as open ground-track spirals. GCRS keeps orbits as closed ellipses. Decision: backend serves GCRS and the frontend rotates the Earth. If the 0.37 degree offset matters later (for example a close follow view), either add precession and nutation to the Earth rotation, or serve TEME directly and rotate the Earth by GMST, which is SGP4's native convention, is more accurate, and would remove the need for Skyfield.
 
-**Data needed:** Frontend requires current satellite positions (GCRS X, Y, Z) at regular intervals for the 3D globe animation. Satellite metadata (name, type, country) is fetched once on load. Filtering and highlighting are client-side operations with no backend involvement.
+## FlatBuffers vs Protobuf for Satellite Metadata
 
-**Polling (V1 decision):** Frontend makes GET /satellites requests every 2-3 seconds. Backend recalculates all satellite positions from cached OMM data at that moment and returns full list. Satellite orbits are smooth curves, so 2-3 second updates provide fluid animation without requiring real-time precision.
+Both were built and measured on 32,510 records. FlatBuffers took about 2s to build in Python (the pure-Python builder) and produced 7.8MB raw / 2.4MB gzipped. Protobuf took about 0.4s and produced 5.0MB raw / 2.8MB gzipped, and its schema carries derived fields (period, perigee, apogee) and satcat fields that the FlatBuffers OMM schema cannot. FlatBuffers' zero-copy reads give no benefit because the UI needs every field as an object for filtering and the card. Decision: protobuf.
 
-Pros: Simple stateless implementation, easier to debug and scale, no connection management overhead. Cons: Network overhead from repeated HTTP requests.
+## Compression
 
-**WebSocket (V2 candidate):** Backend maintains persistent connection and pushes position updates every 2-3 seconds (or delta-only updates to reduce bandwidth). More efficient for scale.
+GZipMiddleware at its default level 9 cost about 560ms per satellites request. Decision: gzip the static satellites payload once at startup, and leave positions uncompressed because they barely compress and change on every request.
 
-Triggers for V2 upgrade: thousands of concurrent users (polling becomes expensive), real-time alerts (conjunction warnings, visibility notifications), multi-user features (seeing others' selected satellites).
+## Polling vs WebSocket
 
-Decision: Start with polling for V1 simplicity and faster time-to-launch. Reserve WebSocket for V2 when scale or notification features require it.
+Polling every 30 seconds plus GPU-side straight-line extrapolation gives smooth motion with a simple stateless backend. WebSockets remain an option for scale or push features such as alerts.
 
-## V2 Roadmap: Database, Optimization & Advanced Features
-After V1 launch, add PostgreSQL for persistence and fallback (when CelesTrak unavailable), FlatBuffers serialization for efficient position streaming (5-20x smaller, zero-copy to WebGPU), pass prediction calculations, and satellite conjunction detection. Pass predictions compute when satellites cross horizon for user locations (expensive, pre-computed nightly). Conjunction analysis detects collision risks by checking 500k+ satellite pairs nightly. Both use skyfield background jobs. UI includes pass timeline, location-based alerts, and conjunction visualization on 3D globe.
+## Satellite List: Virtualization vs Pagination vs Server-side Queries
+
+Rendering all 32k rows (about 130k DOM nodes) made selection and filtering lag. Pagination would hurt browsing and saves nothing because the globe needs all data client-side anyway. Server-side search would add a round trip per keystroke versus about 2ms of local filtering. Decision: virtualize the list and keep filtering on the client.
+
+## Lazy Cache vs Startup Hook
+
+Building caches on first request caused concurrent requests to each parse the JSON and rebuild, about 3.8s under GIL contention. A lock would serialize this, but a startup hook removes the race entirely and takes the cost off the first request. Decision: startup hook.
+
+## Keeping Skyfield
+
+Skyfield is currently only used for the current time and the TEME to GCRS rotation, both replaceable with sgp4 and a client-side GMST rotation. Building satellites through Skyfield's `EarthSatellite` was replaced with sgp4's `omm.initialize`, which halved startup time. Decision: keep Skyfield for now, since pass predictions and conjunction analysis are planned and would use it.
+
+## Sun Position: Client vs Backend
+
+Skyfield can compute a precise Sun position but needs a JPL ephemeris file (about 17MB), far more precision than lighting needs. Decision: compute the Sun's direction on the client from the same timestamp used for Earth rotation.
+
+## Future Work
+
+Scheduled OMM refresh into the database, element set history, satcat join for country and launch data, satellites shaded by whether they are in sunlight, orbit path rendering, pass predictions, and conjunction analysis.
