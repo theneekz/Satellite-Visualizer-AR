@@ -64,10 +64,38 @@ const XR_FAR_M = 1000;
 const XR_THUMBSTICK_DEADZONE = 0.15;
 // The controller pointer rays, in meters.
 const XR_RAY_LENGTH = 5;
+// A trigger press whose grab point moves less than this angle (about 3 degrees, as seen from the
+// controller) counts as a click, not a drag. Squeezing a trigger dips the controller a little.
+const XR_CLICK_MAX_ANGLE_RAD = 0.05;
 
 /** Wraps an angle difference into [-PI, PI] so the camera turns the short way around. */
 function wrapAngle(angle: number) {
   return angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
+}
+
+/**
+ * The yaw and pitch that turn the point (sx, sy, sz), in the globe's unrotated frame, toward the
+ * unit direction (vx, vy, vz). The rotation is rotationX(pitch) * rotationY(yaw), so the yaw is
+ * chosen to give the point v's x component (rotating about X leaves x alone), then the pitch turns
+ * it the rest of the way in the YZ plane. With v = +Z this reduces to yaw = atan2(-sx, sz) and
+ * pitch = atan2(sy, hypot(sx, sz)). Yaw can only sweep the point's x within +-hypot(sx, sz), so a
+ * point near the polar axis can't reach a direction far off to the side; the clamp then turns it
+ * as close as this rotation allows.
+ */
+function aimAngles(
+  sx: number,
+  sy: number,
+  sz: number,
+  vx: number,
+  vy: number,
+  vz: number
+): [number, number] {
+  const length = Math.hypot(sx, sy, sz);
+  const yaw =
+    Math.atan2(sz, sx) -
+    Math.acos(Math.min(1, Math.max(-1, (vx * length) / Math.hypot(sx, sz))));
+  const uz = -sx * Math.sin(yaw) + sz * Math.cos(yaw);
+  return [yaw, Math.atan2(sy, uz) - Math.atan2(vy, vz)];
 }
 
 function canvasSize() {
@@ -83,8 +111,8 @@ function canvasSize() {
  *
  * With `xr`, the renderer is forced onto WebGL 2 (headset browsers lack WebGPU XR bindings) and
  * the page offers buttons to enter an immersive VR or AR (passthrough) session. In a session the
- * globe floats in the room: the thumbstick spins and zooms it, and the trigger selects the
- * satellite a controller points at.
+ * globe floats in the room: the thumbstick spins and zooms it, dragging with the trigger held turns
+ * it, and a trigger click selects the satellite a controller points at.
  *
  * Scene graph, mirroring the WebGPU renderer's frames:
  *   scene
@@ -267,7 +295,8 @@ function GlobeThree({
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     window.addEventListener("resize", resize);
 
-    // XR controllers: each shows a pointer ray, and its trigger selects what it points at.
+    // XR controllers: each shows a pointer ray. Pulling the trigger and turning the controller
+    // drags the globe; a trigger click selects what the ray points at.
     const rayGeometry = new BufferGeometry().setFromPoints([
       new Vector3(0, 0, 0),
       new Vector3(0, 0, -XR_RAY_LENGTH),
@@ -277,19 +306,99 @@ function GlobeThree({
     const inertialInverse = new Matrix4();
     const rayOrigin = new Vector3();
     const rayDirection = new Vector3();
+    const headDirection = new Vector3();
 
-    function handleXRSelect(event: Event & { target: Group }) {
+    const grabPoint = new Vector3();
+    const dragRight = new Vector3();
+    const UP = new Vector3(0, 1, 0);
+
+    // The controller dragging the globe. The grab point is where its ray was at the press, carried
+    // at a fixed distance along the ray, so it follows both turning and moving the controller. The
+    // pick is made at the press too: what the ray pointed at when the trigger went down is what a
+    // click selects, even if the trigger pull dips the controller. Only one controller drags at a
+    // time.
+    let xrDrag: {
+      controller: Group;
+      distance: number;
+      start: Vector3;
+      last: Vector3;
+      pickedId: number | null;
+      moved: boolean;
+    } | null = null;
+
+    /** Where the controller's ray is the given distance out, in world space. */
+    function pointOnRay(controller: Group, distance: number, target: Vector3) {
+      controller.getWorldPosition(rayOrigin);
+      rayDirection.set(0, 0, -1).transformDirection(controller.matrixWorld);
+      return target.copy(rayOrigin).addScaledVector(rayDirection, distance);
+    }
+
+    function handleXRSelectStart(event: Event & { target: Group }) {
       const controller = event.target;
+      controller.getWorldPosition(rayOrigin);
+      // About the distance to the globe's near surface; the drag moves that surface.
+      const distance = Math.max(0.1, rayOrigin.distanceTo(stage.position) - stage.scale.x);
+      const start = pointOnRay(controller, distance, new Vector3());
+      xrDrag = {
+        controller,
+        distance,
+        start,
+        last: start.clone(),
+        pickedId: pickWithController(controller),
+        moved: false,
+      };
+    }
+
+    function handleXRSelectEnd(event: Event & { target: Group }) {
+      if (xrDrag?.controller !== event.target) return;
+      const { moved, pickedId } = xrDrag;
+      xrDrag = null;
+      if (moved) return;
+      // Like a click: a hit turns the satellite toward the user, a miss clears the selection.
+      if (pickedId !== null) following = true;
+      selectedIdRef.current = pickedId;
+      lastSelectedId = pickedId;
+      onSelectRef.current(pickedId);
+    }
+
+    /**
+     * Turns the globe by how far the grab point moved since the last frame, so the surface under
+     * it roughly stays under it: moving the point by some distance along the surface is that over
+     * the radius in globe rotation. The globe doesn't move until the press becomes a drag, so a
+     * click never turns its target away from the ray.
+     */
+    function handleXRDrag() {
+      if (!xrDrag) return;
+      pointOnRay(xrDrag.controller, xrDrag.distance, grabPoint);
+      if (!xrDrag.moved) {
+        if (grabPoint.distanceTo(xrDrag.start) < XR_CLICK_MAX_ANGLE_RAD * xrDrag.distance) return;
+        xrDrag.moved = true;
+        // Dragging the globe hands control back to the user, as on screen. The drag starts here,
+        // so the globe doesn't jump by the distance it took to get past the click threshold.
+        following = false;
+        xrDrag.last.copy(grabPoint);
+        return;
+      }
+      // Sideways is measured across the line from the globe to the head, so it stays sideways
+      // wherever the user stands; up is the room's up.
+      dragRight.subVectors(camera.position, stage.position).cross(UP).negate().normalize();
+      const radius = stage.scale.x;
+      const dx = grabPoint.x - xrDrag.last.x;
+      const dy = grabPoint.y - xrDrag.last.y;
+      const dz = grabPoint.z - xrDrag.last.z;
+      // Moving right turns the near surface right; moving down turns it down.
+      yaw += (dx * dragRight.x + dy * dragRight.y + dz * dragRight.z) / radius;
+      pitch -= dy / radius;
+      xrDrag.last.copy(grabPoint);
+    }
+
+    /** The satellite the controller's ray points at, or null. */
+    function pickWithController(controller: Group) {
       // The ray, from world space into inertial space, where the globe is the unit sphere.
       inertialInverse.copy(inertial.matrixWorld).invert();
       controller.getWorldPosition(rayOrigin).applyMatrix4(inertialInverse);
       rayDirection.set(0, 0, -1).transformDirection(controller.matrixWorld).transformDirection(inertialInverse);
-      const id = satellites.pickRay(rayOrigin, rayDirection);
-      // Like a click: a hit turns the satellite toward the user, a miss clears the selection.
-      if (id !== null) following = true;
-      selectedIdRef.current = id;
-      lastSelectedId = id;
-      onSelectRef.current(id);
+      return satellites.pickRay(rayOrigin, rayDirection);
     }
 
     const controllers = [0, 1].map((index) => {
@@ -297,7 +406,8 @@ function GlobeThree({
       controller.add(new Line(rayGeometry, rayMaterial));
       controller.addEventListener("connected", (e) => inputSources.set(controller, e.data));
       controller.addEventListener("disconnected", () => inputSources.delete(controller));
-      controller.addEventListener("select", handleXRSelect);
+      controller.addEventListener("selectstart", handleXRSelectStart);
+      controller.addEventListener("selectend", handleXRSelectEnd);
       scene.add(controller);
       return controller;
     });
@@ -334,6 +444,7 @@ function GlobeThree({
 
     function handleSessionEnd() {
       setPresenting(false);
+      xrDrag = null;
       scene.background = background;
       stage.position.set(0, 0, 0);
       stage.scale.setScalar(1);
@@ -396,11 +507,14 @@ function GlobeThree({
       satellites.setAngularSizing(inXR);
       renderer.getDrawingBufferSize(drawingBufferSize);
       satellites.update(simTimeMs, drawingBufferSize.x, drawingBufferSize.y);
-      if (inXR) handleThumbsticks(Math.min(frameDt, 0.1));
+      if (inXR) {
+        handleThumbsticks(Math.min(frameDt, 0.1));
+        handleXRDrag();
+      }
 
       // Selecting a satellite turns the camera so it is centered, then keeps it there as it
-      // orbits until the user drags. Rotating by (yaw, pitch) puts a point (sx, sy, sz) on the
-      // +Z axis (toward the camera) when yaw = atan2(-sx, sz) and pitch = atan2(sy, hypot(sx, sz)).
+      // orbits until the user drags. On screen it is turned onto the +Z axis (toward the camera);
+      // in XR it is turned toward the headset, so it sits at eye level wherever the user stands.
       const selected = selectedIdRef.current;
       if (selected !== lastSelectedId) {
         lastSelectedId = selected;
@@ -412,10 +526,23 @@ function GlobeThree({
         const target = satellites.scenePosition(selected);
         if (target) {
           const [sx, sy, sz] = target;
+          // The stage never rotates, so the head's direction from the globe's center in world
+          // space is also its direction in the globe's unrotated frame. The camera holds the
+          // headset's pose from the last frame.
+          if (inXR) headDirection.subVectors(camera.position, stage.position).normalize();
+          else headDirection.set(0, 0, 1);
+          const [targetYaw, targetPitch] = aimAngles(
+            sx,
+            sy,
+            sz,
+            headDirection.x,
+            headDirection.y,
+            headDirection.z
+          );
           // Exponential smoothing: eases in, and stays put once it arrives.
           const k = 1 - Math.exp(-Math.min(frameDt, 0.1) * FOLLOW_RATE);
-          yaw += wrapAngle(Math.atan2(-sx, sz) - yaw) * k;
-          pitch += wrapAngle(Math.atan2(sy, Math.hypot(sx, sz)) - pitch) * k;
+          yaw += wrapAngle(targetYaw - yaw) * k;
+          pitch += wrapAngle(targetPitch - pitch) * k;
           // Zoom out (never in) after a selection, eased in log space so large changes feel even.
           if (framing) {
             const minDistance = Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
@@ -512,7 +639,8 @@ function GlobeThree({
       renderer.xr.removeEventListener("sessionstart", handleSessionStart);
       renderer.xr.removeEventListener("sessionend", handleSessionEnd);
       for (const controller of controllers) {
-        controller.removeEventListener("select", handleXRSelect);
+        controller.removeEventListener("selectstart", handleXRSelectStart);
+        controller.removeEventListener("selectend", handleXRSelectEnd);
         scene.remove(controller);
       }
       rayGeometry.dispose();
