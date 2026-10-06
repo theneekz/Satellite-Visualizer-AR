@@ -13,11 +13,13 @@ import {
 } from "./filters";
 import { usePositionsPolling } from "./hooks/usePositionsPolling";
 
-// ?renderer=three swaps in the Three.js globe to compare it with the hand-written WebGPU one.
-// It is code-split, so the default page never downloads Three.js.
+// ?renderer=three swaps in the Three.js globe to compare it with the hand-written WebGPU one, and
+// ?renderer=xr is that globe on WebGL with buttons to enter VR/AR on a headset. It is
+// code-split, so the default page never downloads Three.js.
 const GlobeThree = lazy(() => import("./components/three/GlobeThree"));
-const USE_THREE =
-  new URLSearchParams(window.location.search).get("renderer") === "three";
+const RENDERER = new URLSearchParams(window.location.search).get("renderer");
+const USE_XR = RENDERER === "xr";
+const USE_THREE = RENDERER === "three" || USE_XR;
 
 function App() {
   const [satellites, setSatellites] = useState<SatelliteInfo[]>([]);
@@ -93,6 +95,7 @@ function App() {
             visibleIds={visibleIds}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            xr={USE_XR}
           />
         </Suspense>
       ) : (

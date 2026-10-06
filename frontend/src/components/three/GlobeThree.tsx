@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
+  BufferGeometry,
   ClampToEdgeWrapping,
   Color,
   Group,
+  Line,
+  LineBasicNodeMaterial,
   LinearSRGBColorSpace,
   Matrix4,
   NoColorSpace,
@@ -13,6 +16,7 @@ import {
   Vector2,
   Vector3,
   WebGPURenderer,
+  type Event,
   type Texture,
 } from "three/webgpu";
 import type { PositionsSnapshot } from "../../api/satellites";
@@ -43,6 +47,24 @@ const FAR_MARGIN = 100;
 // The canvas fills the window but never shrinks below a usable size (the page scrolls instead).
 const MIN_CANVAS_PX = 480;
 
+// XR: the globe floats in front of a standing user at eye height (meters, in the local-floor
+// reference space, where -Z is forward), with the Earth's radius XR_BASE_RADIUS_M at zoom 100%.
+// Zooming grows the globe and pushes its center back so its near surface stays XR_SURFACE_GAP_M
+// away; at the maximum zoom that gap is roughly the height of a low orbit (about 240 km).
+const XR_GLOBE_HEIGHT_M = 1.3;
+const XR_SURFACE_GAP_M = 0.95;
+const XR_BASE_RADIUS_M = 0.25;
+const XR_ZOOM_MAX_PERCENT = 10000;
+// Full thumbstick deflection spins the globe this many radians per second, and zooms by this
+// factor of e per second.
+const XR_SPIN_SPEED = 1.5;
+const XR_ZOOM_SPEED = 1.5;
+// Far enough for geostationary orbits around the largest globe.
+const XR_FAR_M = 1000;
+const XR_THUMBSTICK_DEADZONE = 0.15;
+// The controller pointer rays, in meters.
+const XR_RAY_LENGTH = 5;
+
 /** Wraps an angle difference into [-PI, PI] so the camera turns the short way around. */
 function wrapAngle(angle: number) {
   return angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
@@ -59,27 +81,43 @@ function canvasSize() {
  * Three.js version of Globe, with the same props and behavior. WebGPURenderer uses WebGPU when
  * available and falls back to WebGL 2 otherwise; the label in the corner shows which one is live.
  *
+ * With `xr`, the renderer is forced onto WebGL 2 (headset browsers lack WebGPU XR bindings) and
+ * the page offers buttons to enter an immersive VR or AR (passthrough) session. In a session the
+ * globe floats in the room: the thumbstick spins and zooms it, and the trigger selects the
+ * satellite a controller points at.
+ *
  * Scene graph, mirroring the WebGPU renderer's frames:
  *   scene
- *   └─ inertial  (rotated by the camera's yaw/pitch; GCRS with Y as the polar axis)
- *      ├─ satellites  (positions computed in the vertex shader)
- *      └─ earth       (additionally spun about Y by the Earth Rotation Angle)
+ *   ├─ stage  (identity on screen; places and scales the globe in the room in XR)
+ *   │  └─ inertial  (rotated by the camera's yaw/pitch; GCRS with Y as the polar axis)
+ *   │     ├─ satellites  (positions computed in the vertex shader)
+ *   │     └─ earth       (additionally spun about Y by the Earth Rotation Angle)
+ *   └─ controllers  (XR only; posed by the headset)
  */
 function GlobeThree({
   positionsRef,
   visibleIds,
   selectedId,
   onSelect,
+  xr = false,
 }: {
   positionsRef: RefObject<PositionsSnapshot | null>;
   // Only these satellites are drawn; null means all of them.
   visibleIds: Set<number> | null;
   selectedId: number | null;
   onSelect: (id: number | null) => void;
+  // Offer immersive XR sessions (see above).
+  xr?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [backend, setBackend] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The immersive modes this device supports, and whether a session is running.
+  const [xrModes, setXrModes] = useState<XRSessionMode[]>([]);
+  const [presenting, setPresenting] = useState(false);
+  // Set by the render effect; the buttons call it straight from the click, which the browser
+  // requires before it grants a session.
+  const startXRRef = useRef<((mode: XRSessionMode) => void) | null>(null);
 
   // The render effect runs once, so it reads the latest props through refs.
   const selectedIdRef = useRef(selectedId);
@@ -96,7 +134,8 @@ function GlobeThree({
     let disposed = false;
 
     // Pixel ratio 1 and no MSAA, like the WebGPU renderer, so the two are compared like for like.
-    const renderer = new WebGPURenderer({ antialias: false });
+    // XR gets MSAA, since aliasing shimmers badly in a headset.
+    const renderer = new WebGPURenderer({ antialias: xr, forceWebGL: xr });
     renderer.setPixelRatio(1);
     // Shade in display space like the WebGPU renderer (no sRGB conversion), so colors match.
     renderer.outputColorSpace = LinearSRGBColorSpace;
@@ -106,10 +145,13 @@ function GlobeThree({
     container.appendChild(canvas);
 
     const scene = new Scene();
-    scene.background = new Color(0.02, 0.02, 0.05);
+    const background = new Color(0.02, 0.02, 0.05);
+    scene.background = background;
     const camera = new PerspectiveCamera(FOV_DEG, 1, 0.1, 100);
+    const stage = new Group();
     const inertial = new Group();
-    scene.add(inertial);
+    stage.add(inertial);
+    scene.add(stage);
 
     const satellites = createSatellites();
     inertial.add(satellites.mesh);
@@ -117,6 +159,8 @@ function GlobeThree({
     let map: Texture | null = null;
 
     function resize() {
+      // The headset owns the drawing buffer size during a session.
+      if (renderer.xr.isPresenting) return;
       const { width, height } = canvasSize();
       renderer.setSize(width, height);
       camera.aspect = width / height;
@@ -223,6 +267,106 @@ function GlobeThree({
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     window.addEventListener("resize", resize);
 
+    // XR controllers: each shows a pointer ray, and its trigger selects what it points at.
+    const rayGeometry = new BufferGeometry().setFromPoints([
+      new Vector3(0, 0, 0),
+      new Vector3(0, 0, -XR_RAY_LENGTH),
+    ]);
+    const rayMaterial = new LineBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+    const inputSources = new Map<Group, XRInputSource>();
+    const inertialInverse = new Matrix4();
+    const rayOrigin = new Vector3();
+    const rayDirection = new Vector3();
+
+    function handleXRSelect(event: Event & { target: Group }) {
+      const controller = event.target;
+      // The ray, from world space into inertial space, where the globe is the unit sphere.
+      inertialInverse.copy(inertial.matrixWorld).invert();
+      controller.getWorldPosition(rayOrigin).applyMatrix4(inertialInverse);
+      rayDirection.set(0, 0, -1).transformDirection(controller.matrixWorld).transformDirection(inertialInverse);
+      const id = satellites.pickRay(rayOrigin, rayDirection);
+      // Like a click: a hit turns the satellite toward the user, a miss clears the selection.
+      if (id !== null) following = true;
+      selectedIdRef.current = id;
+      lastSelectedId = id;
+      onSelectRef.current(id);
+    }
+
+    const controllers = [0, 1].map((index) => {
+      const controller = renderer.xr.getController(index);
+      controller.add(new Line(rayGeometry, rayMaterial));
+      controller.addEventListener("connected", (e) => inputSources.set(controller, e.data));
+      controller.addEventListener("disconnected", () => inputSources.delete(controller));
+      controller.addEventListener("select", handleXRSelect);
+      scene.add(controller);
+      return controller;
+    });
+
+    /** Thumbstick input: left/right spins the globe, forward/back zooms it. */
+    function handleThumbsticks(dt: number) {
+      for (const source of inputSources.values()) {
+        // xr-standard gamepads put the thumbstick on axes 2 and 3.
+        const axes = source.gamepad?.axes;
+        if (!axes || axes.length < 4) continue;
+        const [x, y] = [axes[2], axes[3]];
+        if (Math.abs(x) > XR_THUMBSTICK_DEADZONE) {
+          yaw += x * XR_SPIN_SPEED * dt;
+          following = false;
+        }
+        if (Math.abs(y) > XR_THUMBSTICK_DEADZONE) {
+          zoomPercent = Math.min(
+            XR_ZOOM_MAX_PERCENT,
+            Math.max(ZOOM_MIN_PERCENT, zoomPercent * Math.exp(-y * XR_ZOOM_SPEED * dt))
+          );
+        }
+      }
+    }
+
+    function handleSessionStart() {
+      setPresenting(true);
+      // Passthrough AR needs a transparent background to show the room.
+      const blend = renderer.xr.getSession()?.environmentBlendMode;
+      scene.background = blend && blend !== "opaque" ? null : background;
+      // The headset sets the camera's pose and projection; only the clip planes are ours.
+      camera.near = 0.05;
+      camera.far = XR_FAR_M;
+    }
+
+    function handleSessionEnd() {
+      setPresenting(false);
+      scene.background = background;
+      stage.position.set(0, 0, 0);
+      stage.scale.setScalar(1);
+      // XR zooms further than the screen allows.
+      zoomPercent = Math.min(zoomPercent, ZOOM_MAX_PERCENT);
+      // The session left the camera in the headset's last pose.
+      camera.quaternion.identity();
+      resize();
+    }
+
+    if (xr) {
+      renderer.xr.enabled = true;
+      renderer.xr.addEventListener("sessionstart", handleSessionStart);
+      renderer.xr.addEventListener("sessionend", handleSessionEnd);
+      startXRRef.current = (mode) => {
+        const current = renderer.xr.getSession();
+        if (current) {
+          current.end();
+          return;
+        }
+        navigator.xr
+          ?.requestSession(mode, { optionalFeatures: ["local-floor"] })
+          .then((session) => renderer.xr.setSession(session))
+          .catch((err: unknown) => console.error(`Failed to start ${mode}:`, err));
+      };
+      const modes: XRSessionMode[] = ["immersive-vr", "immersive-ar"];
+      Promise.all(modes.map((mode) => navigator.xr?.isSessionSupported(mode) ?? false))
+        .then((supported) => {
+          if (!disposed) setXrModes(modes.filter((_, i) => supported[i]));
+        })
+        .catch(() => {});
+    }
+
     // The simulated "now" the satellites are drawn at; the Earth and Sun use the same instant.
     let simTimeMs = Date.now();
     let lastFrameTime = performance.now();
@@ -248,8 +392,11 @@ function GlobeThree({
         satellites.setPositions(snapshot, visible);
       }
       satellites.setSelected(selectedIdRef.current);
+      const inXR = renderer.xr.isPresenting;
+      satellites.setAngularSizing(inXR);
       renderer.getDrawingBufferSize(drawingBufferSize);
       satellites.update(simTimeMs, drawingBufferSize.x, drawingBufferSize.y);
+      if (inXR) handleThumbsticks(Math.min(frameDt, 0.1));
 
       // Selecting a satellite turns the camera so it is centered, then keeps it there as it
       // orbits until the user drags. Rotating by (yaw, pitch) puts a point (sx, sy, sz) on the
@@ -257,7 +404,9 @@ function GlobeThree({
       const selected = selectedIdRef.current;
       if (selected !== lastSelectedId) {
         lastSelectedId = selected;
-        following = framing = selected !== null;
+        following = selected !== null;
+        // In XR the zoom is the globe's size in the room, which the user sets.
+        framing = following && !inXR;
       }
       if (following && selected !== null) {
         const target = satellites.scenePosition(selected);
@@ -284,6 +433,19 @@ function GlobeThree({
 
       // Euler order XYZ gives rotationX(pitch) * rotationY(yaw), the WebGPU renderer's model matrix.
       inertial.rotation.set(pitch, yaw, 0);
+
+      if (inXR) {
+        // The headset poses the camera; the zoom scales the globe instead. Following a satellite
+        // turns it toward +Z, which here faces the user.
+        const radius = (XR_BASE_RADIUS_M * zoomPercent) / 100;
+        stage.position.set(0, XR_GLOBE_HEIGHT_M, -(XR_SURFACE_GAP_M + radius));
+        stage.scale.setScalar(radius);
+        stage.updateMatrixWorld();
+        updateEarth();
+        renderer.render(scene, camera);
+        return;
+      }
+
       inertial.updateMatrixWorld();
       // In a portrait window the width is the limiting side, so back off to keep the globe in view.
       const distance =
@@ -299,17 +461,19 @@ function GlobeThree({
         .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
         .multiply(inertial.matrixWorld);
 
-      if (earth) {
-        earth.mesh.rotation.y = eraRadians(simTimeMs);
-        // The Sun is inertial like the satellites: the same GCRS -> scene axis swap, then the
-        // camera rotation (but not the Earth's spin), into world space.
-        const [x, y, z] = sunDirection(simTimeMs);
-        earth.sunDirection.copy(
-          sunWorld.set(x, z, -y).applyQuaternion(inertial.quaternion)
-        );
-      }
-
+      updateEarth();
       renderer.render(scene, camera);
+    }
+
+    function updateEarth() {
+      if (!earth) return;
+      earth.mesh.rotation.y = eraRadians(simTimeMs);
+      // The Sun is inertial like the satellites: the same GCRS -> scene axis swap, then the
+      // camera rotation (but not the Earth's spin), into world space. The stage never rotates.
+      const [x, y, z] = sunDirection(simTimeMs);
+      earth.sunDirection.copy(
+        sunWorld.set(x, z, -y).applyQuaternion(inertial.quaternion)
+      );
     }
 
     async function init() {
@@ -343,6 +507,16 @@ function GlobeThree({
 
     return () => {
       disposed = true;
+      startXRRef.current = null;
+      renderer.xr.getSession()?.end();
+      renderer.xr.removeEventListener("sessionstart", handleSessionStart);
+      renderer.xr.removeEventListener("sessionend", handleSessionEnd);
+      for (const controller of controllers) {
+        controller.removeEventListener("select", handleXRSelect);
+        scene.remove(controller);
+      }
+      rayGeometry.dispose();
+      rayMaterial.dispose();
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("pointerdown", handlePointerDown);
@@ -356,7 +530,7 @@ function GlobeThree({
       renderer.dispose();
       canvas.remove();
     };
-  }, [positionsRef]);
+  }, [positionsRef, xr]);
 
   if (error) {
     return <p>Renderer unavailable: {error}</p>;
@@ -366,6 +540,21 @@ function GlobeThree({
     <div ref={containerRef}>
       {backend && (
         <span className="renderer-backend">Three.js · {backend}</span>
+      )}
+      {xrModes.length > 0 && (
+        <div className="xr-buttons">
+          {presenting ? (
+            <button onClick={() => startXRRef.current?.("immersive-vr")}>
+              Exit XR
+            </button>
+          ) : (
+            xrModes.map((mode) => (
+              <button key={mode} onClick={() => startXRRef.current?.(mode)}>
+                {mode === "immersive-ar" ? "Enter AR" : "Enter VR"}
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );

@@ -66,8 +66,8 @@ export function positionAt(
   };
 }
 
-const SATELLITES_URL = "http://localhost:8000/v2/satellites";
-const POSITIONS_URL = "http://localhost:8000/v2/positions";
+const SATELLITES_URL = "/v2/satellites";
+const POSITIONS_URL = "/v2/positions";
 
 /** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */
 function toSatelliteInfo(omm: OMM): SatelliteInfo {

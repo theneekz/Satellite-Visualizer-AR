@@ -27,6 +27,27 @@ body {
   text-decoration: none;
 }
 
+/* Enter VR / AR, above the backend label (only shown where the device supports them). */
+.xr-buttons {
+  position: fixed;
+  bottom: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.xr-buttons button {
+  padding: 10px 22px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(40, 90, 160, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
 /* The active backend sits just above the switch. */
 .renderer-backend {
   bottom: 44px;

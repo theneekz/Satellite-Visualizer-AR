@@ -9,6 +9,7 @@ import {
   MeshBasicNodeMaterial,
   Vector2,
   type Matrix4,
+  type Vector3,
 } from "three/webgpu";
 import {
   attribute,
@@ -20,6 +21,7 @@ import {
   select,
   uniform,
   varying,
+  vec2,
   vec3,
   vec4,
 } from "three/tsl";
@@ -28,14 +30,31 @@ import { FLOATS_PER_SATELLITE, type PositionsSnapshot } from "../../api/satellit
 // Same values as the WebGPU renderer (components/satellite.ts), so the two look identical.
 const EARTH_RADIUS_KM = 6371;
 const SATELLITE_SIZE_PX = 12;
+// In XR, satellites are sized by angle rather than pixels: this is the square's full width, about
+// what SATELLITE_SIZE_PX spans on a desktop screen.
+const SATELLITE_SIZE_XR_RAD = 0.01;
 // A click selects the nearest satellite within this many pixels.
 const PICK_RADIUS_PX = 10;
+// An XR controller ray selects the satellite nearest its aim within this angle (about 1.5 degrees).
+const PICK_RAY_ANGLE_RAD = 0.026;
 
 // One quad as two triangles; each corner is offset in screen space by the vertex shader.
 const QUAD_CORNERS = new Float32Array([
   -1, -1, 0, 1, -1, 0, -1, 1, 0,
   -1, 1, 0, 1, -1, 0, 1, 1, 0,
 ]);
+
+/**
+ * Whether the segment from (ox, oy, oz) to (ox + dx, oy + dy, oz + dz) passes through the unit
+ * globe at the origin, i.e. whether the globe hides its far end from its near end.
+ */
+function segmentHitsGlobe(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number) {
+  const t = Math.min(1, Math.max(0, -(ox * dx + oy * dy + oz * dz) / (dx * dx + dy * dy + dz * dz)));
+  const cx = ox + dx * t;
+  const cy = oy + dy * t;
+  const cz = oz + dz * t;
+  return cx * cx + cy * cy + cz * cz < 1;
+}
 
 /**
  * Every satellite as one instanced draw of screen-facing squares. Each instance holds its polled
@@ -49,6 +68,8 @@ export function createSatellites() {
   const dt = uniform(0);
   const viewport = uniform(new Vector2(1, 1));
   const selectedIndex = uniform(-1);
+  // 1 to size satellites by angle (XR), 0 to size them in pixels.
+  const angularSizing = uniform(0);
 
   const isSelected = instanceIndex.toFloat().equal(selectedIndex);
   const gcrs = attribute("satPosition", "vec3").add(attribute("satVelocity", "vec3").mul(dt));
@@ -56,9 +77,19 @@ export function createSatellites() {
   // scaled so the Earth's radius is 1 like the globe mesh.
   const local = vec3(gcrs.x, gcrs.z, gcrs.y.negate()).div(EARTH_RADIUS_KM);
   const clip = cameraProjectionMatrix.mul(modelViewMatrix).mul(vec4(local, 1));
-  const sizePx = select(isSelected, float(SATELLITE_SIZE_PX * 2), float(SATELLITE_SIZE_PX));
-  // Offset in clip space, scaled by w so the square keeps a constant on-screen size.
-  const offset = positionGeometry.xy.mul(sizePx).div(viewport).mul(clip.w);
+  const sizeScale = select(isSelected, float(2), float(1));
+  // Offset in clip space, scaled by w so the square keeps a constant on-screen size: in pixels of
+  // the drawing buffer, or (in XR) as an angle through the projection's focal lengths, which keeps
+  // it square in each eye whatever the size and shape of the buffer that eye is drawn into.
+  const pixelOffset = positionGeometry.xy.mul(sizeScale.mul(SATELLITE_SIZE_PX)).div(viewport);
+  const focalLengths = vec2(
+    cameraProjectionMatrix.mul(vec4(1, 0, 0, 0)).x,
+    cameraProjectionMatrix.mul(vec4(0, 1, 0, 0)).y
+  );
+  const angularOffset = positionGeometry.xy
+    .mul(focalLengths)
+    .mul(sizeScale.mul(Math.tan(SATELLITE_SIZE_XR_RAD / 2)));
+  const offset = select(angularSizing.greaterThan(0.5), angularOffset, pixelOffset).mul(clip.w);
 
   const material = new MeshBasicNodeMaterial({ side: DoubleSide });
   material.vertexNode = vec4(clip.xy.add(offset), clip.z, clip.w);
@@ -148,6 +179,11 @@ export function createSatellites() {
     resolveSelectedIndex();
   }
 
+  /** Sizes satellites by angle (for XR, where pixels aren't meaningful) or in pixels. */
+  function setAngularSizing(enabled: boolean) {
+    angularSizing.value = enabled ? 1 : 0;
+  }
+
   /** Per-frame uniforms: the simulated time and the drawing buffer size in pixels. */
   function update(simTimeMs: number, viewportWidth: number, viewportHeight: number) {
     dt.value = (simTimeMs - snapshotTimeMs) / 1000;
@@ -210,14 +246,36 @@ export function createSatellites() {
       const wx = r[0] * x + r[4] * y + r[8] * z;
       const wy = r[1] * x + r[5] * y + r[9] * z;
       const wz = r[2] * x + r[6] * y + r[10] * z - cameraDistance;
-      const t = Math.min(1, Math.max(0, -(cameraDistance * wz) / (wx * wx + wy * wy + wz * wz)));
-      const cx = wx * t;
-      const cy = wy * t;
-      const cz = cameraDistance + wz * t;
-      if (cx * cx + cy * cy + cz * cz < 1) continue;
+      if (segmentHitsGlobe(0, 0, cameraDistance, wx, wy, wz)) continue;
 
       best = i;
       bestDist2 = dist2;
+    }
+    return best === -1 ? null : ids[best];
+  }
+
+  /**
+   * The id of the satellite nearest the aim of a ray (an XR controller's) within
+   * PICK_RAY_ANGLE_RAD, or null. `origin` and the normalized `direction` are in inertial group
+   * space, where the globe is the unit sphere; satellites hidden behind the globe are skipped.
+   */
+  function pickRay(origin: Vector3, direction: Vector3): number | null {
+    let best = -1;
+    let bestCos = Math.cos(PICK_RAY_ANGLE_RAD);
+
+    for (let i = 0; i < count; i++) {
+      positionAt(i, scratch);
+      const dx = scratch[0] - origin.x;
+      const dy = scratch[1] - origin.y;
+      const dz = scratch[2] - origin.z;
+      const length = Math.hypot(dx, dy, dz);
+      if (length === 0) continue;
+      const cos = (dx * direction.x + dy * direction.y + dz * direction.z) / length;
+      if (cos <= bestCos) continue;
+      if (segmentHitsGlobe(origin.x, origin.y, origin.z, dx, dy, dz)) continue;
+
+      best = i;
+      bestCos = cos;
     }
     return best === -1 ? null : ids[best];
   }
@@ -227,5 +285,5 @@ export function createSatellites() {
     material.dispose();
   }
 
-  return { mesh, setPositions, setSelected, update, scenePosition, pick, dispose };
+  return { mesh, setPositions, setSelected, setAngularSizing, update, scenePosition, pick, pickRay, dispose };
 }
