@@ -2,43 +2,60 @@
 
 # Overview
 
-Bring the satellite list, filters, and satellite card into the immersive XR mode (`?renderer=xr`) on Meta Quest with the same functionality as the desktop panels, using spatial panels, controller and hand input, and a hand-anchored menu for opening and closing them. Status: planning. The UI stack decision is open until the @pmndrs and React Three Fiber research below is done.
+Bring the satellite list, filters, and satellite card into the immersive XR mode (`?renderer=xr`) on Meta Quest with the same functionality as the desktop panels, drawn as WebXR compositor layers with controller and hand input and a hand-anchored menu for opening and closing them. Scope is Quest Browser (Chromium-based) only. Status: planning, with the UI stack decided.
 
 # Detailed Design
 
 ## Architecture Overview
 
-The XR mode today is `components/three/GlobeThree` on `WebGPURenderer` forced onto WebGL 2, with TSL shaders, a thumbstick for spin and zoom, and the trigger for selection. The HTML panels are not visible in a headset because Quest Browser does not support the DOM Overlay module, so the panels must be rebuilt as 3D objects in the scene. The leading candidate is `@pmndrs/uikit` (Yoga flexbox layout, MSDF text, batched panels) with `@pmndrs/pointer-events` for ray, poke, and hand input and `@pmndrs/handle` for grabbing, which are the same building blocks Meta's Immersive Web SDK (IWSDK) uses. App state stays in `App.tsx` as the single source of truth, and the XR panels read it through refs or signals so React never runs inside the XR frame loop.
+The XR mode is `components/three/GlobeThree` on `WebGPURenderer` forced onto WebGL 2, with TSL shaders, the thumbstick for spin and zoom, and the trigger for dragging the globe and selecting satellites. Quest Browser does not support the DOM Overlay module, so the HTML panels are not visible in a headset. Each panel becomes a WebXR Layers quad or cylinder layer created through `renderer.xr.createQuadLayer` and `createCylinderLayer`, which `WebGPURenderer` supports natively, with its content drawn by Canvas 2D. App state stays in `App.tsx` as the single source of truth, and the XR panels read it through refs so React never runs inside the XR frame loop.
 
 ## Frontend
 
-### Renderer Constraint
+### WebXR Layers
 
-uikit 1.0.76's panel and glyph materials use `onBeforeCompile`, which `WebGPURenderer` ignores, so uikit does not render on the current XR path. Using uikit means running XR on the classic `WebGLRenderer` and porting the satellite and Earth materials from TSL to GLSL for the XR build only. `?renderer=three` stays on `WebGPURenderer` for the WebGPU comparison. Performance is not the reason for the switch: `WebGPURenderer` supports XR multiview and runs XR on WebGL 2 either way. The XR globe should become its own module rather than more branches in `GlobeThree`.
+The system compositor samples a layer's texture directly at display resolution instead of drawing it into the eye buffers and resampling it through lens distortion, which is why Meta recommends layers for text and UI. They give the sharpest text available in WebXR.
+
+- `createQuadLayer(width, height, translation, quaternion, pixelWidth, pixelHeight, renderCall)` returns a plane mesh that goes in the scene. In a session that plane punches a hole (zero blending) so the layer, composited behind the projection layer, shows through with correct occlusion by the globe and satellites.
+- `renderer.xr.renderLayers()` runs each layer's render callback and is called in the frame loop before `renderer.render`.
+- The list uses a cylinder layer, a gentle curve in the Horizon OS style that keeps text at an even distance. The card, filters, and menu use quad layers.
+- A layer always composites behind 3D content, so nothing passes through a panel. The card's leader line ends at its edge.
+- A layer's size is fixed when it is created, so open and close animations move and fade layers rather than scale them.
+- three re-renders every layer each frame. Each layer is a single textured quad, so that cost is small.
+- The IWER emulator gets layers from `webxr-layers-polyfill`, which is already installed.
+- Staying on `WebGPURenderer` means no renderer switch and no TSL to GLSL shader port.
+
+### Panel Rendering
+
+Each panel owns an offscreen Canvas 2D and a `CanvasTexture`. The layer's render callback draws a single plane with that texture into the layer's render target.
+
+- Panels redraw only when their data changes: scroll, hover, press, selection, filters, and once a second for the card's live values. A redraw sets `needsUpdate` on the texture, so an unchanged panel costs no upload.
+- Each panel keeps a list of hit regions (buttons, chips, rows, slider handles) built during its draw, so drawing and hit testing never disagree.
+- Canvas sizes are chosen per panel for about 1 to 1.5 pixels per arcminute at the panel's distance, for example 1024 by 1536 for the list.
+- Widgets are built in-house: button, chip, toggle, two-handle slider, text field, scrollbar and scrubber. They share one small style module (colors, radii, font sizes) matching the desktop panels.
 
 ### Frame Budget
 
-Quest 3 runs at 72Hz (13.9ms) or 90Hz (11.1ms) per stereo frame, which leaves the main thread a few milliseconds at most. Rules that follow from this:
+Quest 3 runs at 72Hz (13.9ms) or 90Hz (11.1ms) per stereo frame, which leaves the main thread a few milliseconds at most.
 
-- Panels redraw only when their data changes (uikit updates are dirty-driven).
-- React re-renders happen only on filter or selection changes, never per frame. The DOM `SatelliteList` should not stay mounted while presenting, since its effects still run.
+- Canvas redraws and texture uploads happen only on change, as above.
+- React re-renders happen only on filter or selection changes, never per frame. The DOM `SatelliteList` is not mounted while presenting, since its effects still run.
 - `filterSatellites` over 32,510 records runs on the main thread. The 250ms debounce is enough on desktop, but it needs profiling in the headset and a move to a Web Worker or chunked pass if it drops frames.
 - No per-frame hover picking against satellites. Panel hit tests are cheap, but a ray against every satellite each frame is not without a spatial index. Satellite picking stays on trigger only.
-- Mostly opaque panel backgrounds, since overlapping transparency is GPU overdraw in a headset.
+- Mostly opaque panel backgrounds.
 
 ### Satellite List
 
-The list holds 32,510 rows. Virtualization was required on desktop to stop stutter, and it is required again in XR because uikit has scroll containers but no virtualization, and one uikit node plus MSDF text per row would stall the headset.
+The list holds 32,510 rows. Virtualization was required on desktop to stop stutter, and Canvas 2D makes it inherent in XR: each redraw paints only the 15 to 20 rows in view at the current scroll offset, so there are no per-row objects and list size never affects frame time.
 
-- A fixed pool of row components (visible count plus 2) is recycled. Scrolling only translates the pool by the fractional row offset, which is a matrix change with no relayout.
-- A row's text is rebound only when its index crosses a row boundary, and rebinds per frame are capped during fast flings. This needs measuring on device.
-- Hits map to rows arithmetically: one flat hit target and `index = floor((localY + scrollOffset) / rowHeight)`, with no per-row raycasts.
-- Scrolling: thumbstick while the ray is over the list, ray drag, and hand pinch-drag, all with inertia. A fast-scroll scrubber on the edge is required, since thumbstick scrolling through 32k rows is not usable on its own.
-- Selecting a row selects the satellite and the globe follows it, as on desktop.
+- Hits map to rows arithmetically: `index = floor((localY + scrollOffset) / rowHeight)`.
+- Scrolling: thumbstick while the ray is over the list, ray drag, and hand pinch-drag, all with inertia. A redraw happens only on frames where the offset changed.
+- A fast-scroll scrubber on the edge is required, since thumbstick scrolling through 32k rows is not usable on its own.
+- Selecting a row selects the satellite and the globe follows it, as on desktop. Selecting from the globe scrolls the row into view.
 
 ### Filters and Search
 
-- Search stays. Quest Browser 26.1+ supports the system keyboard in WebXR (`XRSession.isSystemKeyboardSupported`): tapping the 3D search field focuses a hidden DOM `<input>`, and its value is mirrored into the field and fed through the existing debounce. Limitations: each keyboard session overwrites the field's whole value, there are no key events, and the input must be in the DOM.
+- Search stays. Quest Browser 26.1+ supports the system keyboard in WebXR (`XRSession.isSystemKeyboardSupported`): tapping the search field focuses a hidden DOM `<input>`, and its value is mirrored into the drawn field and fed through the existing debounce. Limitations: each keyboard session overwrites the field's whole value, there are no key events, and the input must be in the DOM.
 - Type and size become chips instead of dropdowns.
 - Launch year becomes a two-handle range slider (1957 to the current year) instead of two text inputs.
 - Clear filters stays.
@@ -52,30 +69,34 @@ The list holds 32,510 rows. Virtualization was required on desktop to stop stutt
 
 ### Input
 
-- Controllers and hands are both first class. Far panels use rays; panels within reach accept poke. Both come from pointer-events.
-- Hands have no thumbstick, so the globe also needs grab-to-rotate and two-hand pinch-to-scale, which `@pmndrs/handle` provides.
-- Panels are hit-tested before the globe, and while a ray is over a panel, the thumbstick drives that panel instead of the globe.
-- Fix: a trigger press that misses every satellite currently clears the selection, which happens constantly by accident in XR. A miss should do nothing; deselect is the card's close button or the B button.
+Layers receive no input, so a small input router owns it.
+
+- Each frame, each controller or hand ray is tested against the layer planes first, then the globe. The nearest hit owns that input source's hover, trigger, and thumbstick.
+- A panel hit converts to canvas pixels through the plane's UV (or the cylinder's angle and height), then to the panel's hit regions.
+- While a ray is over a panel, the thumbstick drives that panel instead of spinning and zooming the globe.
+- Controllers and hands are both first class. Far panels use rays; panels within reach accept poke.
+- Hands have no thumbstick, so the globe also needs grab-to-rotate and two-hand pinch-to-scale. `@pmndrs/handle` provides these and has no materials, so it works with `WebGPURenderer`.
+- The globe's trigger drag tracks a grab point on the ray at the near surface's distance, so turning and moving the controller both drag it, and a press only turns the globe once it passes a 3 degree click threshold. Clicks pick what the ray pointed at when the trigger went down. A selected satellite turns toward the headset, so it sits at eye level. These are implemented.
+- Fix still to do: a trigger click that misses every satellite clears the selection, which happens constantly by accident in XR. A miss should do nothing; deselect is the card's close button or the B button.
 - Ray polish: shorten the ray to its hit point, show a cursor dot, highlight on hover, and give a short haptic pulse on hover.
 
 ### Panel Layout and Opening and Closing
 
 - Panels are world-locked around the globe in a shallow arc about 1 to 1.3m away and slightly below eye height: list and filters on the left, card on the right.
-- Each panel has a grab bar along its bottom edge for moving it, in the style of Horizon OS and visionOS windows.
+- Each panel has a grab bar along its bottom edge for moving it with `@pmndrs/handle`, in the style of Horizon OS and visionOS windows. Moving a panel moves its layer plane, and three updates the layer's transform from it each frame.
 - Panels lazy-follow only on recenter. IWSDK's `Follower` is a reference for the thresholds and smoothing.
 - A menu on the non-dominant hand holds List, Filters, Search, Recenter, and Exit XR. With hands it fades in when the palm faces up; with controllers it floats above the left controller.
-- Closing a panel animates it shrinking into its menu icon, and reopening flies it back to its last pose, so the user always sees where a panel went.
+- Closing a panel animates it moving into its menu icon and fading out, and reopening moves it back to its last pose, so the user always sees where a panel went.
 - Y or B toggles all panels, and holding it recenters them. Which buttons Quest Browser exposes needs testing; the system buttons are reserved.
 
 ### Phases
 
-0. Spike: a classic `WebGLRenderer` XR scene with ported satellite shaders and one uikit panel holding a recycled 32k-row list, profiled on a real Quest 3 for a stable 72Hz while flinging. The IWER emulator is for iteration only, not timing.
-1. Input routing (panels before globe), the trigger-miss fix, and hand grab-rotate and pinch-scale for the globe.
-2. Satellite card, leader line, and orbit ring.
-3. List, scrubber, and system keyboard search.
+1. Satellite card: the first quad layer, the Canvas 2D panel base (redraw on change, hit regions), the shared widget and style module, the More toggle and close button, the leader line, and the orbit ring. It needs the minimal input router (panels before globe) for its buttons, and it is where text sharpness is judged against the same canvas on a plain mesh.
+2. Input: the trigger-miss fix, hand grab-rotate and pinch-scale for the globe, and ray polish.
+3. List on a cylinder layer, scrubber, and system keyboard search. Profiled on a real Quest 3 for a stable 72Hz while flinging 32k rows before moving on; the IWER emulator is for iteration only, not timing.
 4. Filters.
 5. Hand menu, close and reopen animations, recenter, and grab bars.
-6. Polish: haptics, foveation and multiview tuning, and DOM Overlay for handheld Android AR, where the existing React panels would work as is.
+6. Polish: haptics, foveation and multiview tuning.
 
 ## Backend
 
@@ -99,24 +120,24 @@ N/A
 
 ## Dependencies
 
-- three (classic `WebGLRenderer` for XR if uikit is adopted)
-- @pmndrs/uikit, @pmndrs/pointer-events, @pmndrs/handle (candidates, pending research)
-- Possibly @react-three/fiber, @react-three/xr, @react-three/uikit (see Open Questions)
+- three (`WebGPURenderer` on WebGL 2 for XR, with its native WebXR Layers support)
+- @pmndrs/handle (grab, move, rotate, and scale for panels and the globe)
 - Dev: iwer, @iwer/devui, webxr-layers-polyfill, @vitejs/plugin-basic-ssl (already installed)
 
 # Alternatives considered
 
 ## UI Stack
 
-- Classic `WebGLRenderer` with vanilla uikit, pointer-events, and handle: the leading option. The cost is a TSL to GLSL port of the satellite and Earth materials for XR. In return it gets layout, crisp text, hover and press states, ray, hand, and poke input, and grabbing without writing them.
-- Stay on `WebGPURenderer` with custom canvas-texture panels: no shader port, but layout, text crispness, scrolling, hover, animation, poke, and grab would all be custom. Reasonable for one read-only card, but expensive for the list, filters, and menu.
+Decision: `WebGPURenderer` with WebXR quad and cylinder layers drawn by Canvas 2D, an in-house input router, and `@pmndrs/handle`. With only a few panels and only Quest to support, the sharpest text, no renderer switch or shader port, built-in list virtualization, and a small dependency set outweigh building the widgets ourselves.
+
+- Classic `WebGLRenderer` with vanilla `@pmndrs/uikit`, `@pmndrs/uikit-horizon`, and `@pmndrs/pointer-events`: the fallback if building the widgets costs more than expected. uikit gives Yoga flexbox layout, MSDF text, and Horizon OS styled components (button, toggle, slider, input field, dropdown, radio group). But uikit 1.0.76's panel and glyph materials and `@pmndrs/xr`'s pointer ray and cursor visuals all use `onBeforeCompile`, which `WebGPURenderer` ignores, so this route needs a TSL to GLSL port of the satellite and Earth materials for XR. uikit has no virtualized list either; its scroll position signal would drive a hand-built recycled row pool, possibly through `@tanstack/virtual-core`'s custom `observeElementRect`, `observeElementOffset`, and `scrollToFn` hooks.
+- React Three Fiber with `@react-three/xr` and `@react-three/uikit`: the path the @pmndrs docs lead with, keeping the XR UI in React like the desktop panels. Every @pmndrs package also ships a vanilla build, so React Three Fiber is not required to use them. It would add a reconciler, a rewrite of the imperative globe loop into `useFrame`, and React work near the frame loop, and it carries the same `WebGLRenderer` requirement for uikit. Rejected.
 - Adopt IWSDK fully: the most capability out of the box, but it pins three to a fork (super-three 0.181, versus 0.186 here) and brings its own ECS (elics), so the XR mode would become a rewrite separate from the rest of the app. Its patterns (PanelUI, Follower) are still worth borrowing.
-- React Three Fiber with @react-three/xr and @react-three/uikit: under research (see Open Questions). It is the primary path the @pmndrs docs describe, and it would keep the XR UI in React like the desktop panels, but it adds a reconciler and a React-driven scene alongside the imperative globe.
 
 ## Rendering the Panels
 
-- DOM Overlay: not supported on Quest 3 or for immersive-vr on Quest 2. Kept only as a later add-on for handheld Android AR.
-- WebXR quad or cylinder layers: the sharpest text the compositor offers, but composited outside the scene and harder to combine with uikit. Deferred to polish.
+- Canvas 2D on plain textured meshes in the scene: the same drawing code without layers, but text is resampled through the eye buffers and loses sharpness. Kept as the fallback if layers misbehave, and as the sharpness comparison when the card is built.
+- DOM Overlay: not supported on Quest 3 or for immersive-vr on Quest 2, and handheld Android AR is out of scope.
 - three-mesh-ui: uses `ShaderMaterial`, which `WebGPURenderer` does not support, and is less maintained than uikit. Avoid.
 
 ## What to Omit
@@ -131,9 +152,8 @@ N/A
 
 ## Open Questions
 
-- React Three Fiber: the @pmndrs packages (uikit, pointer-events, handle, xr) are documented React-first through @react-three/fiber and @react-three/xr. Is moving the XR globe to R3F worth it versus using their vanilla builds? Consider how the imperative render loop, `setAnimationLoop`, and ref-driven updates would map onto R3F's `useFrame`, and whether R3F's renderer setup works with `WebGPURenderer` or forces `WebGLRenderer` anyway.
-- Virtualized lists: does @react-three/uikit (or uikit's vanilla API) offer a virtualized or recycled list, or a pattern for one? If not, the recycled pool above is built by hand either way.
-- Does @react-three/xr provide hand menus, pointer rays, teleport-free grab, and controller button mapping that would replace pieces of this plan?
-- Spike results: frame time on Quest 3 for the recycled list during a fling, text rebind cost per row, and the TSL to GLSL port effort.
+- How much sharper the card's layer text is than the same canvas on a mesh (phase 1), and frame time on Quest 3 while flinging the list (phase 3).
+- Whether layers that have not changed can skip three's per-frame layer render, and whether that matters.
 - Hand menu or floor dock, decided after testing on device.
 - Which Quest controller buttons are exposed to WebXR for the panel toggle and recenter.
+- Whether to clamp the globe's pitch to plus or minus 90 degrees on desktop and XR, so it can't turn upside down and reverse horizontal drags.
