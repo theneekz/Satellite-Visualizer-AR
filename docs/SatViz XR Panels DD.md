@@ -62,10 +62,11 @@ The list holds 32,510 rows. Virtualization was required on desktop to stop stutt
 
 ### Satellite Card
 
-- Kept: name, NORAD id and designator, badges, live position (refreshed once a second), period, and inclination.
-- Behind a More toggle: orbital elements (RAAN, argument of perigee, mean anomaly, BSTAR), revolutions, and source.
-- The 2D orbit diagram is replaced by a 3D orbit ring drawn around the globe for the selected satellite, with a leader line from the satellite to the card.
+- Same data as the page's card: name, NORAD id and designator, badges, live position (refreshed once a second), orbit, data (epoch, element set age, source, revolutions), and orbital elements. `components/satelliteDetails.ts` builds the contents for both cards, so they can't drift apart.
+- The four sections sit in a 2x2 grid instead of the page's single column, so the card stays within a comfortable field of view. Its quad layer is 520 by 448 layout pixels at 1mm each and 1.5 canvas pixels per layout pixel, placed 1m from the user, 40 degrees to the right, facing them.
+- The orbit visualization is deferred: the 2D orbit diagram and its 3D replacement (an orbit ring around the globe with a leader line to the card) come later.
 - The card is tied to selection, so it needs no reopen control: selecting opens it, and close or deselect hides it.
+- Implemented (phase 1, except the orbit visualization and the plain-mesh sharpness comparison).
 
 ### Input
 
@@ -83,7 +84,7 @@ Layers receive no input, so a small input router owns it.
 ### Panel Layout and Opening and Closing
 
 - Panels are world-locked around the globe in a shallow arc about 1 to 1.3m away and slightly below eye height: list and filters on the left, card on the right.
-- Each panel has a grab bar along its bottom edge for moving it with `@pmndrs/handle`, in the style of Horizon OS and visionOS windows. Moving a panel moves its layer plane, and three updates the layer's transform from it each frame.
+- Each panel has a grab bar centered under it, in the style of Horizon OS and visionOS windows. A trigger press on the bar carries the grabbed spot at a fixed distance along the ray, and the panel stays upright and turns about the vertical to face the head. While dragging, that controller's thumbstick pushes the panel away or pulls it in, from 0.3m to 4m. A panel's pose lives on its group, so moving it moves its layer plane, and three updates the layer's transform from it each frame. This is implemented for the card with controllers; hand pinch-drag comes with hand input. It is hand-rolled on the same ray math as the globe drag rather than `@pmndrs/handle`, which would need its pointer event system.
 - Panels lazy-follow only on recenter. IWSDK's `Follower` is a reference for the thresholds and smoothing.
 - A menu on the non-dominant hand holds List, Filters, Search, Recenter, and Exit XR. With hands it fades in when the palm faces up; with controllers it floats above the left controller.
 - Closing a panel animates it moving into its menu icon and fading out, and reopening moves it back to its last pose, so the user always sees where a panel went.
@@ -91,7 +92,7 @@ Layers receive no input, so a small input router owns it.
 
 ### Phases
 
-1. Satellite card: the first quad layer, the Canvas 2D panel base (redraw on change, hit regions), the shared widget and style module, the More toggle and close button, the leader line, and the orbit ring. It needs the minimal input router (panels before globe) for its buttons, and it is where text sharpness is judged against the same canvas on a plain mesh.
+1. Satellite card: the first quad layer, the Canvas 2D panel base (redraw on change, hit regions), the shared style module, and the close button. The orbit diagram, orbit ring, and leader line follow once the orbit visualization is designed. It needs the minimal input router (panels before globe) for its buttons, and it is where text sharpness is judged against the same canvas on a plain mesh.
 2. Input: the trigger-miss fix, hand grab-rotate and pinch-scale for the globe, and ray polish.
 3. List on a cylinder layer, scrubber, and system keyboard search. Profiled on a real Quest 3 for a stable 72Hz while flinging 32k rows before moving on; the IWER emulator is for iteration only, not timing.
 4. Filters.

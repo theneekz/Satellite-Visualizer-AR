@@ -1,35 +1,18 @@
 import { useEffect, useState, type RefObject } from "react";
+import type { PositionsSnapshot, SatelliteInfo } from "../api/satellites";
+import type { LiveState } from "./liveState";
 import {
-  positionAt,
-  type PositionsSnapshot,
-  type SatelliteInfo,
-} from "../api/satellites";
-import { sentenceCase } from "../format";
-import { computeLiveState, type LiveState } from "./liveState";
+  fmt,
+  liveStateAt,
+  satelliteDetails,
+  type DetailMetric,
+} from "./satelliteDetails";
 import "./SatelliteCard.css";
 
 const EARTH_RADIUS_KM = 6378.137;
 const DAY_MS = 86400000;
 
-function fmt(value: number, digits = 0) {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
-}
-
-// Older element sets mean less accurate positions.
-function elementAge(epochMs: number, nowMs: number) {
-  const days = (nowMs - epochMs) / DAY_MS;
-  const text =
-    days < 1
-      ? `${fmt(Math.max(0, days * 24))} hours old`
-      : `${fmt(days, 1)} days old`;
-  const level = days < 3 ? "fresh" : days < 7 ? "aging" : "stale";
-  return { text, level };
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value }: DetailMetric) {
   return (
     <div>
       <div className="satellite-card__key">{label}</div>
@@ -149,13 +132,7 @@ function SatelliteCard({
     function tick() {
       const t = Date.now();
       setNowMs(t);
-      const snapshot = positionsRef.current;
-      const index = snapshot?.indexById.get(satellite.id);
-      setLive(
-        snapshot && index !== undefined
-          ? computeLiveState(positionAt(snapshot, index), snapshot.t, t)
-          : null
-      );
+      setLive(liveStateAt(positionsRef.current, satellite.id, t));
     }
     tick();
     const timer = setInterval(tick, 1000);
@@ -170,17 +147,14 @@ function SatelliteCard({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const launchYear = /^(\d{4})-/.exec(satellite.designator)?.[1];
-  const age = elementAge(satellite.epoch_ms, nowMs);
+  const details = satelliteDetails(satellite, live, nowMs);
 
   return (
-    <aside className="satellite-card" aria-label={`${satellite.name} details`}>
+    <aside className="satellite-card" aria-label={`${details.name} details`}>
       <div className="satellite-card__header">
         <div>
-          <h2 className="satellite-card__name">{satellite.name}</h2>
-          <p className="satellite-card__sub">
-            NORAD {satellite.id} · {satellite.designator}
-          </p>
+          <h2 className="satellite-card__name">{details.name}</h2>
+          <p className="satellite-card__sub">{details.subtitle}</p>
         </div>
         <button
           type="button"
@@ -193,113 +167,39 @@ function SatelliteCard({
       </div>
 
       <div className="satellite-card__badges">
-        {satellite.object_type && (
-          <span className="satellite-card__badge satellite-card__badge--type">
-            {sentenceCase(satellite.object_type)}
+        {details.badges.map((badge) => (
+          <span
+            key={badge.text}
+            className={`satellite-card__badge${badge.tone === "type" ? " satellite-card__badge--type" : ""}`}
+          >
+            {badge.text}
           </span>
-        )}
-        {satellite.rcs && (
-          <span className="satellite-card__badge">
-            {sentenceCase(satellite.rcs)}
-          </span>
-        )}
-        {launchYear && (
-          <span className="satellite-card__badge">Launched {launchYear}</span>
-        )}
+        ))}
       </div>
 
-      <section className="satellite-card__section">
-        <h3 className="satellite-card__label">Live position</h3>
-        <div className="satellite-card__grid">
-          <Metric
-            label="Altitude"
-            value={live ? `${fmt(live.altitudeKm)} km` : "—"}
-          />
-          <Metric
-            label="Speed"
-            value={live ? `${fmt(live.speedKmS, 1)} km/s` : "—"}
-          />
-          <Metric
-            label="Latitude"
-            value={
-              live
-                ? `${fmt(Math.abs(live.latitudeDeg), 1)}° ${live.latitudeDeg >= 0 ? "N" : "S"}`
-                : "—"
-            }
-          />
-          <Metric
-            label="Longitude"
-            value={
-              live
-                ? `${fmt(Math.abs(live.longitudeDeg), 1)}° ${live.longitudeDeg >= 0 ? "E" : "W"}`
-                : "—"
-            }
-          />
-        </div>
-      </section>
-
-      <section className="satellite-card__section">
-        <h3 className="satellite-card__label">Orbit</h3>
-        <OrbitDiagram info={satellite} nowMs={nowMs} />
-        <div className="satellite-card__grid">
-          <Metric
-            label="Period"
-            value={`${fmt(satellite.period_min, 1)} min`}
-          />
-          <Metric
-            label="Inclination"
-            value={`${fmt(satellite.inclination_deg, 2)}°`}
-          />
-          <Metric label="Eccentricity" value={fmt(satellite.eccentricity, 3)} />
-          <Metric
-            label="Mean motion"
-            value={`${fmt(satellite.mean_motion, 2)} rev/day`}
-          />
-        </div>
-      </section>
-
-      <section className="satellite-card__section">
-        <h3 className="satellite-card__label">Data</h3>
-        <div className="satellite-card__epoch">
-          <Metric
-            label="Epoch"
-            value={`${new Date(satellite.epoch_ms).toISOString().slice(0, 16).replace("T", " ")} UTC`}
-          />
-          <span
-            className={`satellite-card__badge satellite-card__badge--${age.level}`}
-          >
-            {age.text}
-          </span>
-        </div>
-        <div className="satellite-card__grid">
-          {satellite.originator && (
-            <Metric label="Source" value={satellite.originator} />
+      {details.sections.map((section) => (
+        <section key={section.id} className="satellite-card__section">
+          <h3 className="satellite-card__label">{section.label}</h3>
+          {section.id === "orbit" && (
+            <OrbitDiagram info={satellite} nowMs={nowMs} />
           )}
-          <Metric label="Revolutions" value={fmt(satellite.rev_at_epoch)} />
-        </div>
-      </section>
-
-      <section className="satellite-card__section">
-        <h3 className="satellite-card__label">Orbital elements</h3>
-        <div className="satellite-card__grid">
-          <Metric
-            label="RA of asc. node"
-            value={`${fmt(satellite.raan_deg, 2)}°`}
-          />
-          <Metric
-            label="Arg. of perigee"
-            value={`${fmt(satellite.arg_perigee_deg, 2)}°`}
-          />
-          <Metric
-            label="Mean anomaly"
-            value={`${fmt(satellite.mean_anomaly_deg, 2)}°`}
-          />
-          <Metric
-            label="BSTAR (drag)"
-            value={satellite.bstar.toExponential(2)}
-          />
-        </div>
-      </section>
+          {section.id === "data" && (
+            <div className="satellite-card__epoch">
+              <Metric {...details.epoch} />
+              <span
+                className={`satellite-card__badge satellite-card__badge--${details.age.level}`}
+              >
+                {details.age.text}
+              </span>
+            </div>
+          )}
+          <div className="satellite-card__grid">
+            {section.metrics.map((metric) => (
+              <Metric key={metric.label} {...metric} />
+            ))}
+          </div>
+        </section>
+      ))}
     </aside>
   );
 }

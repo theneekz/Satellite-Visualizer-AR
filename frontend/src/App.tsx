@@ -94,6 +94,7 @@ function App() {
             positionsRef={positionsRef}
             visibleIds={visibleIds}
             selectedId={selectedId}
+            selectedSatellite={selected}
             onSelect={setSelectedId}
             xr={USE_XR}
           />

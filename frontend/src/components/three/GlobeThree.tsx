@@ -10,6 +10,8 @@ import {
   Matrix4,
   NoColorSpace,
   PerspectiveCamera,
+  Quaternion,
+  Raycaster,
   RepeatWrapping,
   Scene,
   TextureLoader,
@@ -19,11 +21,12 @@ import {
   type Event,
   type Texture,
 } from "three/webgpu";
-import type { PositionsSnapshot } from "../../api/satellites";
+import type { PositionsSnapshot, SatelliteInfo } from "../../api/satellites";
 import { eraRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
 import { createSatellites } from "./satellites";
+import { createXRSatelliteCard, type CardRegion, type XRSatelliteCard } from "./xr/satelliteCard";
 import earthTextureUrl from "../../assets/earth.jpg";
 
 // Camera and interaction tuning, matching the WebGPU renderer (components/Globe.tsx).
@@ -64,9 +67,19 @@ const XR_FAR_M = 1000;
 const XR_THUMBSTICK_DEADZONE = 0.15;
 // The controller pointer rays, in meters.
 const XR_RAY_LENGTH = 5;
+// The satellite card floats this far from the standing user, this far to the right of straight
+// ahead, and turned to face them, with its center a little above the globe's.
+const XR_CARD_DISTANCE_M = 1;
+const XR_CARD_ANGLE_RAD = (40 * Math.PI) / 180;
+const XR_CARD_HEIGHT_M = XR_GLOBE_HEIGHT_M + 0.05;
 // A trigger press whose grab point moves less than this angle (about 3 degrees, as seen from the
 // controller) counts as a click, not a drag. Squeezing a trigger dips the controller a little.
 const XR_CLICK_MAX_ANGLE_RAD = 0.05;
+// While a panel is dragged, the dragging controller's thumbstick pushes it away or pulls it in,
+// by this rate (like the zoom's), between these distances from the controller in meters.
+const XR_PANEL_PUSH_SPEED = 1.5;
+const XR_PANEL_MIN_DISTANCE_M = 0.3;
+const XR_PANEL_MAX_DISTANCE_M = 4;
 
 /** Wraps an angle difference into [-PI, PI] so the camera turns the short way around. */
 function wrapAngle(angle: number) {
@@ -120,12 +133,14 @@ function canvasSize() {
  *   │  └─ inertial  (rotated by the camera's yaw/pitch; GCRS with Y as the polar axis)
  *   │     ├─ satellites  (positions computed in the vertex shader)
  *   │     └─ earth       (additionally spun about Y by the Earth Rotation Angle)
+ *   ├─ card  (XR only; the satellite card's layer plane, or its mesh without layers)
  *   └─ controllers  (XR only; posed by the headset)
  */
 function GlobeThree({
   positionsRef,
   visibleIds,
   selectedId,
+  selectedSatellite,
   onSelect,
   xr = false,
 }: {
@@ -133,6 +148,8 @@ function GlobeThree({
   // Only these satellites are drawn; null means all of them.
   visibleIds: Set<number> | null;
   selectedId: number | null;
+  // The selected satellite's details, for the XR card.
+  selectedSatellite: SatelliteInfo | null;
   onSelect: (id: number | null) => void;
   // Offer immersive XR sessions (see above).
   xr?: boolean;
@@ -149,10 +166,12 @@ function GlobeThree({
 
   // The render effect runs once, so it reads the latest props through refs.
   const selectedIdRef = useRef(selectedId);
+  const selectedSatelliteRef = useRef(selectedSatellite);
   const onSelectRef = useRef(onSelect);
   const visibleIdsRef = useRef(visibleIds);
   useEffect(() => {
     selectedIdRef.current = selectedId;
+    selectedSatelliteRef.current = selectedSatellite;
     onSelectRef.current = onSelect;
     visibleIdsRef.current = visibleIds;
   });
@@ -309,6 +328,8 @@ function GlobeThree({
     const headDirection = new Vector3();
 
     const grabPoint = new Vector3();
+    const panelGrabPoint = new Vector3();
+    const panelGrabOffset = new Vector3();
     const dragRight = new Vector3();
     const UP = new Vector3(0, 1, 0);
 
@@ -333,8 +354,35 @@ function GlobeThree({
       return target.copy(rayOrigin).addScaledVector(rayDirection, distance);
     }
 
+    // A trigger press that started on a panel, and the part of it pressed. It acts on release if
+    // the ray is still on that part, like a button on the page.
+    let panelPress: { controller: Group; region: CardRegion } | null = null;
+    // The controller dragging the card by its grab bar. As with the globe, the grab point is
+    // carried at a fixed distance along the ray; the card turns to face the head and sits so the
+    // spot grabbed (in the card's own space) stays on it.
+    let panelDrag: { controller: Group; distance: number; local: Vector3 } | null = null;
+    const raycaster = new Raycaster();
+
+    /** What the controller's ray points at on the card, if anything. */
+    function cardHit(controller: Group) {
+      if (!card) return null;
+      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).transformDirection(controller.matrixWorld);
+      return card.hitTest(raycaster);
+    }
+
     function handleXRSelectStart(event: Event & { target: Group }) {
       const controller = event.target;
+      // Panels are in front of the globe, so they get the press first.
+      const hit = cardHit(controller);
+      if (hit?.region === "grab") {
+        panelDrag = { controller, distance: hit.distance, local: hit.local };
+        return;
+      }
+      if (hit) {
+        panelPress = { controller, region: hit.region };
+        return;
+      }
       controller.getWorldPosition(rayOrigin);
       // About the distance to the globe's near surface; the drag moves that surface.
       const distance = Math.max(0.1, rayOrigin.distanceTo(stage.position) - stage.scale.x);
@@ -350,6 +398,22 @@ function GlobeThree({
     }
 
     function handleXRSelectEnd(event: Event & { target: Group }) {
+      if (panelDrag?.controller === event.target) {
+        panelDrag = null;
+        return;
+      }
+      if (panelPress?.controller === event.target) {
+        const pressed = panelPress.region;
+        panelPress = null;
+        if (pressed === "close" && cardHit(event.target)?.region === "close") {
+          // Closing the card clears the selection, like its close button on the page.
+          following = false;
+          selectedIdRef.current = null;
+          lastSelectedId = null;
+          onSelectRef.current(null);
+        }
+        return;
+      }
       if (xrDrag?.controller !== event.target) return;
       const { moved, pickedId } = xrDrag;
       xrDrag = null;
@@ -392,6 +456,23 @@ function GlobeThree({
       xrDrag.last.copy(grabPoint);
     }
 
+    /**
+     * Moves the card with the controller dragging it. It stays upright and turns about the
+     * vertical to face the head, like a window, so it reads squarely wherever it is put.
+     */
+    function handlePanelDrag() {
+      if (!panelDrag || !card) return;
+      pointOnRay(panelDrag.controller, panelDrag.distance, panelGrabPoint);
+      // The camera holds the headset's pose from the last frame.
+      const facing = Math.atan2(
+        camera.position.x - panelGrabPoint.x,
+        camera.position.z - panelGrabPoint.z
+      );
+      card.object.quaternion.setFromAxisAngle(UP, facing);
+      panelGrabOffset.copy(panelDrag.local).applyQuaternion(card.object.quaternion);
+      card.object.position.subVectors(panelGrabPoint, panelGrabOffset);
+    }
+
     /** The satellite the controller's ray points at, or null. */
     function pickWithController(controller: Group) {
       // The ray, from world space into inertial space, where the globe is the unit sphere.
@@ -401,9 +482,13 @@ function GlobeThree({
       return satellites.pickRay(rayOrigin, rayDirection);
     }
 
+    // Each controller's pointer ray, which is cut short where it meets a panel.
+    const rays = new Map<Group, Line>();
     const controllers = [0, 1].map((index) => {
       const controller = renderer.xr.getController(index);
-      controller.add(new Line(rayGeometry, rayMaterial));
+      const ray = new Line(rayGeometry, rayMaterial);
+      rays.set(controller, ray);
+      controller.add(ray);
       controller.addEventListener("connected", (e) => inputSources.set(controller, e.data));
       controller.addEventListener("disconnected", () => inputSources.delete(controller));
       controller.addEventListener("selectstart", handleXRSelectStart);
@@ -412,13 +497,28 @@ function GlobeThree({
       return controller;
     });
 
-    /** Thumbstick input: left/right spins the globe, forward/back zooms it. */
+    /**
+     * Thumbstick input: left/right spins the globe, forward/back zooms it. A controller dragging
+     * the card pushes it away or pulls it in instead.
+     */
     function handleThumbsticks(dt: number) {
-      for (const source of inputSources.values()) {
+      for (const [controller, source] of inputSources) {
         // xr-standard gamepads put the thumbstick on axes 2 and 3.
         const axes = source.gamepad?.axes;
         if (!axes || axes.length < 4) continue;
         const [x, y] = [axes[2], axes[3]];
+        if (panelDrag?.controller === controller) {
+          if (Math.abs(y) > XR_THUMBSTICK_DEADZONE) {
+            panelDrag.distance = Math.min(
+              XR_PANEL_MAX_DISTANCE_M,
+              Math.max(
+                XR_PANEL_MIN_DISTANCE_M,
+                panelDrag.distance * Math.exp(-y * XR_PANEL_PUSH_SPEED * dt)
+              )
+            );
+          }
+          continue;
+        }
         if (Math.abs(x) > XR_THUMBSTICK_DEADZONE) {
           yaw += x * XR_SPIN_SPEED * dt;
           following = false;
@@ -432,8 +532,14 @@ function GlobeThree({
       }
     }
 
+    // Whether this session shows panels as WebXR layers; the IWER emulator has none.
+    let sessionUsesLayers = false;
+
     function handleSessionStart() {
       setPresenting(true);
+      sessionUsesLayers =
+        renderer.xr.getSession()?.enabledFeatures?.includes("layers") ?? false;
+      card?.setUsesLayers(sessionUsesLayers);
       // Passthrough AR needs a transparent background to show the room.
       const blend = renderer.xr.getSession()?.environmentBlendMode;
       scene.background = blend && blend !== "opaque" ? null : background;
@@ -442,9 +548,53 @@ function GlobeThree({
       camera.far = XR_FAR_M;
     }
 
+    // The XR satellite card, created once the renderer is initialized, and the satellite and second
+    // it last showed.
+    let card: XRSatelliteCard | null = null;
+    let cardSatellite: SatelliteInfo | null = null;
+    let cardSecond = -1;
+
+    /**
+     * Keeps the card showing the selected satellite with its live position refreshed once a
+     * second, cuts each controller's ray short where it meets the card, and highlights the close
+     * button and grab bar under a ray, and the grab bar while dragged.
+     */
+    function updateXRPanels() {
+      if (!card) return;
+      const satellite = selectedSatelliteRef.current;
+      if (satellite !== cardSatellite) {
+        cardSatellite = satellite;
+        card.show(satellite);
+        cardSecond = -1;
+      }
+      const now = Date.now();
+      const second = Math.floor(now / 1000);
+      if (second !== cardSecond) {
+        cardSecond = second;
+        card.refresh(positionsRef.current, now);
+      }
+      let closeHovered = false;
+      let grabHighlighted = panelDrag !== null;
+      for (const controller of controllers) {
+        const hit = inputSources.has(controller) ? cardHit(controller) : null;
+        const distance = panelDrag?.controller === controller ? panelDrag.distance : hit?.distance;
+        rays.get(controller)!.scale.z = distance !== undefined ? distance / XR_RAY_LENGTH : 1;
+        if (hit?.region === "close") closeHovered = true;
+        if (hit?.region === "grab") grabHighlighted = true;
+      }
+      card.setCloseHovered(closeHovered);
+      card.setGrabHighlighted(grabHighlighted);
+      card.update();
+    }
+
     function handleSessionEnd() {
       setPresenting(false);
       xrDrag = null;
+      panelPress = null;
+      panelDrag = null;
+      // Off the headset the page shows its own card.
+      card?.show(null);
+      cardSatellite = null;
       scene.background = background;
       stage.position.set(0, 0, 0);
       stage.scale.setScalar(1);
@@ -466,7 +616,7 @@ function GlobeThree({
           return;
         }
         navigator.xr
-          ?.requestSession(mode, { optionalFeatures: ["local-floor"] })
+          ?.requestSession(mode, { optionalFeatures: ["local-floor", "layers"] })
           .then((session) => renderer.xr.setSession(session))
           .catch((err: unknown) => console.error(`Failed to start ${mode}:`, err));
       };
@@ -510,6 +660,7 @@ function GlobeThree({
       if (inXR) {
         handleThumbsticks(Math.min(frameDt, 0.1));
         handleXRDrag();
+        handlePanelDrag();
       }
 
       // Selecting a satellite turns the camera so it is centered, then keeps it there as it
@@ -562,13 +713,15 @@ function GlobeThree({
       inertial.rotation.set(pitch, yaw, 0);
 
       if (inXR) {
-        // The headset poses the camera; the zoom scales the globe instead. Following a satellite
-        // turns it toward +Z, which here faces the user.
+        // The headset poses the camera; the zoom scales the globe instead.
         const radius = (XR_BASE_RADIUS_M * zoomPercent) / 100;
         stage.position.set(0, XR_GLOBE_HEIGHT_M, -(XR_SURFACE_GAP_M + radius));
         stage.scale.setScalar(radius);
         stage.updateMatrixWorld();
         updateEarth();
+        updateXRPanels();
+        // Layers are drawn into their own textures before the scene, which punches their holes.
+        if (sessionUsesLayers) renderer.xr.renderLayers();
         renderer.render(scene, camera);
         return;
       }
@@ -616,6 +769,19 @@ function GlobeThree({
       map.wrapT = ClampToEdgeWrapping;
       earth = createEarth(map);
       inertial.add(earth.mesh);
+      if (xr) {
+        // To the user's right on an arc around where they stand, turned about Y to face them.
+        card = createXRSatelliteCard(
+          renderer,
+          new Vector3(
+            XR_CARD_DISTANCE_M * Math.sin(XR_CARD_ANGLE_RAD),
+            XR_CARD_HEIGHT_M,
+            -XR_CARD_DISTANCE_M * Math.cos(XR_CARD_ANGLE_RAD)
+          ),
+          new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -XR_CARD_ANGLE_RAD)
+        );
+        scene.add(card.object);
+      }
       const live = renderer.backend as { isWebGPUBackend?: boolean };
       setBackend(live.isWebGPUBackend ? "WebGPU" : "WebGL 2");
       // setAnimationLoop (rather than requestAnimationFrame) is what WebXR sessions drive.
@@ -653,6 +819,7 @@ function GlobeThree({
       canvas.removeEventListener("pointercancel", handlePointerCancel);
       canvas.removeEventListener("wheel", handleWheel);
       satellites.dispose();
+      card?.dispose();
       earth?.dispose();
       map?.dispose();
       renderer.dispose();
