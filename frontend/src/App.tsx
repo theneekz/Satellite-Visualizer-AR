@@ -26,6 +26,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [filters, setFilters] = useState<SatelliteFilters>(DEFAULT_FILTERS);
+  // While an XR session runs, the headset shows its own list, so the page's isn't mounted.
+  const [presentingXR, setPresentingXR] = useState(false);
   const positionsRef = usePositionsPolling();
 
   useEffect(() => {
@@ -74,20 +76,22 @@ function App() {
 
   return (
     <main>
-      <SatelliteList
-        satellites={filtered}
-        totalCount={satellites.length}
-        loading={loading}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-      >
-        <SatelliteFilterBar
-          filters={filters}
-          options={filterOptions}
-          onChange={patchFilters}
-          onReset={resetFilters}
-        />
-      </SatelliteList>
+      {!presentingXR && (
+        <SatelliteList
+          satellites={filtered}
+          totalCount={satellites.length}
+          loading={loading}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        >
+          <SatelliteFilterBar
+            filters={filters}
+            options={filterOptions}
+            onChange={patchFilters}
+            onReset={resetFilters}
+          />
+        </SatelliteList>
+      )}
       {USE_THREE ? (
         <Suspense fallback={null}>
           <GlobeThree
@@ -95,8 +99,18 @@ function App() {
             visibleIds={visibleIds}
             selectedId={selectedId}
             selectedSatellite={selected}
+            xrList={{
+              satellites: filtered,
+              totalCount: satellites.length,
+              loading,
+              filters,
+              filterOptions,
+              onFiltersChange: patchFilters,
+              onFiltersReset: resetFilters,
+            }}
             onSelect={setSelectedId}
             xr={USE_XR}
+            onPresentingChange={setPresentingXR}
           />
         </Suspense>
       ) : (

@@ -28,8 +28,9 @@ function SatelliteFilterBar({
   onReset: () => void
 }) {
   const [queryInput, setQueryInput] = useState(filters.query)
-  const [fromInput, setFromInput] = useState('')
-  const [toInput, setToInput] = useState('')
+  // Start from the applied years, which the XR list may have set while this was unmounted.
+  const [fromInput, setFromInput] = useState(filters.yearFrom?.toString() ?? '')
+  const [toInput, setToInput] = useState(filters.yearTo?.toString() ?? '')
 
   const query = useDebouncedValue(queryInput, DEBOUNCE_MS)
   const from = useDebouncedValue(fromInput, DEBOUNCE_MS)

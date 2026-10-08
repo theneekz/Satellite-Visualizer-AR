@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   ClampToEdgeWrapping,
   Color,
+  Euler,
   Group,
   Line,
   LineBasicNodeMaterial,
@@ -26,7 +27,9 @@ import { eraRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
 import { createSatellites } from "./satellites";
-import { createXRSatelliteCard, type CardRegion, type XRSatelliteCard } from "./xr/satelliteCard";
+import { createXRSatelliteCard, type XRSatelliteCard } from "./xr/satelliteCard";
+import type { FilterOptions, SatelliteFilters } from "../../filters";
+import { createXRSatelliteList, type ListHit, type XRSatelliteList } from "./xr/satelliteList";
 import earthTextureUrl from "../../assets/earth.jpg";
 
 // Camera and interaction tuning, matching the WebGPU renderer (components/Globe.tsx).
@@ -72,6 +75,16 @@ const XR_RAY_LENGTH = 5;
 const XR_CARD_DISTANCE_M = 1;
 const XR_CARD_ANGLE_RAD = (40 * Math.PI) / 180;
 const XR_CARD_HEIGHT_M = XR_GLOBE_HEIGHT_M + 0.05;
+// The satellite list mirrors the card on the user's left, its center at the same height.
+const XR_LIST_DISTANCE_M = 1;
+const XR_LIST_ANGLE_RAD = (-40 * Math.PI) / 180;
+const XR_LIST_HEIGHT_M = XR_CARD_HEIGHT_M;
+// Full thumbstick deflection, with the ray on the list, scrolls it this many layout pixels per
+// second (about 50 rows). The deflection is squared, so a light push scrolls slowly.
+const XR_LIST_SCROLL_SPEED = 2000;
+// The xr-standard gamepad index of the left controller's Y button, which toggles the list until
+// the hand menu exists.
+const XR_Y_BUTTON = 5;
 // A trigger press whose grab point moves less than this angle (about 3 degrees, as seen from the
 // controller) counts as a click, not a drag. Squeezing a trigger dips the controller a little.
 const XR_CLICK_MAX_ANGLE_RAD = 0.05;
@@ -118,6 +131,23 @@ function canvasSize() {
   };
 }
 
+// What a controller's ray points at on a panel, tagged with the panel.
+type PanelHit =
+  | ({ panel: "card" } & NonNullable<ReturnType<XRSatelliteCard["hitTest"]>>)
+  | ({ panel: "list" } & ListHit);
+
+/** What the XR list shows and how it changes the filters, which App owns. */
+export interface XRListProps {
+  // The filtered satellites, the unfiltered count, and whether they are still loading.
+  satellites: SatelliteInfo[];
+  totalCount: number;
+  loading: boolean;
+  filters: SatelliteFilters;
+  filterOptions: FilterOptions;
+  onFiltersChange: (patch: Partial<SatelliteFilters>) => void;
+  onFiltersReset: () => void;
+}
+
 /**
  * Three.js version of Globe, with the same props and behavior. WebGPURenderer uses WebGPU when
  * available and falls back to WebGL 2 otherwise; the label in the corner shows which one is live.
@@ -134,6 +164,7 @@ function canvasSize() {
  *   │     ├─ satellites  (positions computed in the vertex shader)
  *   │     └─ earth       (additionally spun about Y by the Earth Rotation Angle)
  *   ├─ card  (XR only; the satellite card's layer plane, or its mesh without layers)
+ *   ├─ list  (XR only; the satellite list, likewise)
  *   └─ controllers  (XR only; posed by the headset)
  */
 function GlobeThree({
@@ -141,6 +172,8 @@ function GlobeThree({
   visibleIds,
   selectedId,
   selectedSatellite,
+  xrList,
+  onPresentingChange,
   onSelect,
   xr = false,
 }: {
@@ -150,9 +183,13 @@ function GlobeThree({
   selectedId: number | null;
   // The selected satellite's details, for the XR card.
   selectedSatellite: SatelliteInfo | null;
+  // The XR satellite list's contents and filter controls.
+  xrList: XRListProps;
   onSelect: (id: number | null) => void;
   // Offer immersive XR sessions (see above).
   xr?: boolean;
+  // Told when an XR session starts and ends, so the page can unmount what the headset can't show.
+  onPresentingChange?: (presenting: boolean) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [backend, setBackend] = useState<string | null>(null);
@@ -169,12 +206,18 @@ function GlobeThree({
   const selectedSatelliteRef = useRef(selectedSatellite);
   const onSelectRef = useRef(onSelect);
   const visibleIdsRef = useRef(visibleIds);
+  const xrListRef = useRef(xrList);
   useEffect(() => {
+    xrListRef.current = xrList;
     selectedIdRef.current = selectedId;
     selectedSatelliteRef.current = selectedSatellite;
     onSelectRef.current = onSelect;
     visibleIdsRef.current = visibleIds;
   });
+
+  useEffect(() => {
+    onPresentingChange?.(presenting);
+  }, [presenting, onPresentingChange]);
 
   useEffect(() => {
     const container = containerRef.current!;
@@ -332,6 +375,7 @@ function GlobeThree({
     const panelGrabOffset = new Vector3();
     const dragRight = new Vector3();
     const UP = new Vector3(0, 1, 0);
+    const panelFacing = new Euler(0, 0, 0, "YXZ");
 
     // The controller dragging the globe. The grab point is where its ray was at the press, carried
     // at a fixed distance along the ray, so it follows both turning and moving the controller. The
@@ -354,33 +398,57 @@ function GlobeThree({
       return target.copy(rayOrigin).addScaledVector(rayDirection, distance);
     }
 
-    // A trigger press that started on a panel, and the part of it pressed. It acts on release if
-    // the ray is still on that part, like a button on the page.
-    let panelPress: { controller: Group; region: CardRegion } | null = null;
-    // The controller dragging the card by its grab bar. As with the globe, the grab point is
-    // carried at a fixed distance along the ray; the card turns to face the head and sits so the
-    // spot grabbed (in the card's own space) stays on it.
-    let panelDrag: { controller: Group; distance: number; local: Vector3 } | null = null;
+    // A trigger press that started on a panel, and what it pressed. The card acts on release if
+    // the ray is still on that part, like a button on the page; the list handles its own presses.
+    let panelPress: { controller: Group; hit: PanelHit } | null = null;
+    // The controller dragging a panel by its grab bar. As with the globe, the grab point is carried
+    // at a fixed distance along the ray; the panel turns to face the head and sits so the spot
+    // grabbed (in the panel's own space) stays on it.
+    let panelDrag: { controller: Group; object: Group; distance: number; local: Vector3 } | null =
+      null;
     const raycaster = new Raycaster();
 
-    /** What the controller's ray points at on the card, if anything. */
-    function cardHit(controller: Group) {
-      if (!card) return null;
+    /** What the controller's ray points at on the nearest panel, if anything. */
+    function panelHit(controller: Group): PanelHit | null {
       raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
       raycaster.ray.direction.set(0, 0, -1).transformDirection(controller.matrixWorld);
-      return card.hitTest(raycaster);
+      const onCard = card?.hitTest(raycaster) ?? null;
+      const onList = list?.hitTest(raycaster) ?? null;
+      if (onList && (!onCard || onList.distance < onCard.distance)) return { panel: "list", ...onList };
+      return onCard && { panel: "card", ...onCard };
+    }
+
+    function panelObject(panel: PanelHit["panel"]) {
+      return panel === "card" ? card!.object : list!.object;
+    }
+
+    /** Closes or opens the list, dropping it if it is being dragged. */
+    function setListOpen(open: boolean) {
+      if (!list) return;
+      if (!open && panelDrag?.object === list.object) panelDrag = null;
+      if (!open && panelPress?.hit.panel === "list") panelPress = null;
+      // Closing drops a press in progress on it.
+      list.setOpen(open);
     }
 
     function handleXRSelectStart(event: Event & { target: Group }) {
       const controller = event.target;
       // Panels are in front of the globe, so they get the press first.
-      const hit = cardHit(controller);
+      const hit = panelHit(controller);
       if (hit?.region === "grab") {
-        panelDrag = { controller, distance: hit.distance, local: hit.local };
+        panelDrag = {
+          controller,
+          object: panelObject(hit.panel),
+          distance: hit.distance,
+          local: hit.local,
+        };
         return;
       }
       if (hit) {
-        panelPress = { controller, region: hit.region };
+        // One panel press at a time; a press with the other controller replaces it.
+        if (panelPress?.hit.panel === "list") list?.cancelPointer();
+        panelPress = { controller, hit };
+        if (hit.panel === "list") list!.pointerDown(hit);
         return;
       }
       controller.getWorldPosition(rayOrigin);
@@ -403,9 +471,14 @@ function GlobeThree({
         return;
       }
       if (panelPress?.controller === event.target) {
-        const pressed = panelPress.region;
+        const pressed = panelPress.hit;
         panelPress = null;
-        if (pressed === "close" && cardHit(event.target)?.region === "close") {
+        const hit = panelHit(event.target);
+        if (pressed.panel === "list") {
+          list?.pointerUp(hit?.panel === "list" ? hit : null);
+          return;
+        }
+        if (hit?.panel === "card" && hit.region === "close" && pressed.region === "close") {
           // Closing the card clears the selection, like its close button on the page.
           following = false;
           selectedIdRef.current = null;
@@ -457,20 +530,24 @@ function GlobeThree({
     }
 
     /**
-     * Moves the card with the controller dragging it. It stays upright and turns about the
-     * vertical to face the head, like a window, so it reads squarely wherever it is put.
+     * Moves the panel with the controller dragging it. It turns to face the head, so it reads
+     * squarely wherever it is put, even overhead or down low, but never rolls: its top and bottom
+     * edges stay level, like a window.
      */
     function handlePanelDrag() {
-      if (!panelDrag || !card) return;
+      if (!panelDrag) return;
       pointOnRay(panelDrag.controller, panelDrag.distance, panelGrabPoint);
       // The camera holds the headset's pose from the last frame.
-      const facing = Math.atan2(
-        camera.position.x - panelGrabPoint.x,
-        camera.position.z - panelGrabPoint.z
-      );
-      card.object.quaternion.setFromAxisAngle(UP, facing);
-      panelGrabOffset.copy(panelDrag.local).applyQuaternion(card.object.quaternion);
-      card.object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      const dx = camera.position.x - panelGrabPoint.x;
+      const dy = camera.position.y - panelGrabPoint.y;
+      const dz = camera.position.z - panelGrabPoint.z;
+      // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
+      // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
+      panelFacing.set(-Math.atan2(dy, Math.hypot(dx, dz)), Math.atan2(dx, dz), 0);
+      const { object } = panelDrag;
+      object.quaternion.setFromEuler(panelFacing);
+      panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
+      object.position.subVectors(panelGrabPoint, panelGrabOffset);
     }
 
     /** The satellite the controller's ray points at, or null. */
@@ -497,9 +574,22 @@ function GlobeThree({
       return controller;
     });
 
+    // Whether each controller's Y button was down last frame, so a press toggles the list once.
+    const yButtonDown = new Map<Group, boolean>();
+
+    /** The left controller's Y button opens and closes the list. */
+    function handleButtons() {
+      for (const [controller, source] of inputSources) {
+        if (source.handedness !== "left") continue;
+        const down = source.gamepad?.buttons[XR_Y_BUTTON]?.pressed ?? false;
+        if (down && !yButtonDown.get(controller) && list) setListOpen(!list.isOpen());
+        yButtonDown.set(controller, down);
+      }
+    }
+
     /**
      * Thumbstick input: left/right spins the globe, forward/back zooms it. A controller dragging
-     * the card pushes it away or pulls it in instead.
+     * a panel pushes it away or pulls it in instead, and one pointing at the list scrolls it.
      */
     function handleThumbsticks(dt: number) {
       for (const [controller, source] of inputSources) {
@@ -516,6 +606,12 @@ function GlobeThree({
                 panelDrag.distance * Math.exp(-y * XR_PANEL_PUSH_SPEED * dt)
               )
             );
+          }
+          continue;
+        }
+        if (panelHit(controller)?.panel === "list") {
+          if (Math.abs(y) > XR_THUMBSTICK_DEADZONE) {
+            list!.scrollBy(y * Math.abs(y) * XR_LIST_SCROLL_SPEED * dt);
           }
           continue;
         }
@@ -540,6 +636,8 @@ function GlobeThree({
       sessionUsesLayers =
         renderer.xr.getSession()?.enabledFeatures?.includes("layers") ?? false;
       card?.setUsesLayers(sessionUsesLayers);
+      list?.setUsesLayers(sessionUsesLayers);
+      setListOpen(true);
       // Passthrough AR needs a transparent background to show the room.
       const blend = renderer.xr.getSession()?.environmentBlendMode;
       scene.background = blend && blend !== "opaque" ? null : background;
@@ -554,13 +652,34 @@ function GlobeThree({
     let cardSatellite: SatelliteInfo | null = null;
     let cardSecond = -1;
 
+    // The XR satellite list, created with the card.
+    let list: XRSatelliteList | null = null;
+
+    // What the list does when used; the frame loop picks up the selection and filters from props.
+    const listCallbacks = {
+      onSelect: (id: number) => onSelectRef.current(id),
+      onClose: () => setListOpen(false),
+      onFiltersChange: (patch: Partial<SatelliteFilters>) => xrListRef.current.onFiltersChange(patch),
+      onFiltersReset: () => xrListRef.current.onFiltersReset(),
+    };
+
     /**
      * Keeps the card showing the selected satellite with its live position refreshed once a
-     * second, cuts each controller's ray short where it meets the card, and highlights the close
-     * button and grab bar under a ray, and the grab bar while dragged.
+     * second and the list showing the latest satellites and selection, cuts each controller's ray
+     * short where it meets a panel, and highlights what the rays point at: rows, close buttons,
+     * and grab bars, and a grab bar while dragged.
      */
     function updateXRPanels() {
-      if (!card) return;
+      if (!card || !list) return;
+      const listProps = xrListRef.current;
+      list.setSatellites(listProps.satellites, listProps.totalCount, listProps.loading);
+      list.setFilters(listProps.filters, listProps.filterOptions);
+      list.setSelected(selectedIdRef.current);
+      // A held press on the list follows the ray, for dragging the year slider.
+      if (panelPress?.hit.panel === "list") {
+        const hit = panelHit(panelPress.controller);
+        list.pointerMove(hit?.panel === "list" ? hit : null);
+      }
       const satellite = selectedSatelliteRef.current;
       if (satellite !== cardSatellite) {
         cardSatellite = satellite;
@@ -573,18 +692,27 @@ function GlobeThree({
         cardSecond = second;
         card.refresh(positionsRef.current, now);
       }
-      let closeHovered = false;
-      let grabHighlighted = panelDrag !== null;
+      let cardCloseHovered = false;
+      let cardGrabHighlighted = panelDrag?.object === card.object;
+      let listHovered: string | null = null;
+      let listGrabHighlighted = panelDrag?.object === list.object;
       for (const controller of controllers) {
-        const hit = inputSources.has(controller) ? cardHit(controller) : null;
+        const hit = inputSources.has(controller) ? panelHit(controller) : null;
         const distance = panelDrag?.controller === controller ? panelDrag.distance : hit?.distance;
         rays.get(controller)!.scale.z = distance !== undefined ? distance / XR_RAY_LENGTH : 1;
-        if (hit?.region === "close") closeHovered = true;
-        if (hit?.region === "grab") grabHighlighted = true;
+        if (hit?.panel === "card") {
+          if (hit.region === "close") cardCloseHovered = true;
+          if (hit.region === "grab") cardGrabHighlighted = true;
+        } else if (hit?.panel === "list") {
+          if (hit.region === "grab") listGrabHighlighted = true;
+          else listHovered ??= hit.key;
+        }
       }
-      card.setCloseHovered(closeHovered);
-      card.setGrabHighlighted(grabHighlighted);
+      card.setCloseHovered(cardCloseHovered);
+      card.setGrabHighlighted(cardGrabHighlighted);
       card.update();
+      list.setHover(listHovered, listGrabHighlighted);
+      list.update();
     }
 
     function handleSessionEnd() {
@@ -595,6 +723,8 @@ function GlobeThree({
       // Off the headset the page shows its own card.
       card?.show(null);
       cardSatellite = null;
+      list?.setOpen(false);
+      yButtonDown.clear();
       scene.background = background;
       stage.position.set(0, 0, 0);
       stage.scale.setScalar(1);
@@ -658,6 +788,7 @@ function GlobeThree({
       renderer.getDrawingBufferSize(drawingBufferSize);
       satellites.update(simTimeMs, drawingBufferSize.x, drawingBufferSize.y);
       if (inXR) {
+        handleButtons();
         handleThumbsticks(Math.min(frameDt, 0.1));
         handleXRDrag();
         handlePanelDrag();
@@ -781,6 +912,17 @@ function GlobeThree({
           new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -XR_CARD_ANGLE_RAD)
         );
         scene.add(card.object);
+        list = createXRSatelliteList(
+          renderer,
+          new Vector3(
+            XR_LIST_DISTANCE_M * Math.sin(XR_LIST_ANGLE_RAD),
+            XR_LIST_HEIGHT_M,
+            -XR_LIST_DISTANCE_M * Math.cos(XR_LIST_ANGLE_RAD)
+          ),
+          new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -XR_LIST_ANGLE_RAD),
+          listCallbacks
+        );
+        scene.add(list.object);
       }
       const live = renderer.backend as { isWebGPUBackend?: boolean };
       setBackend(live.isWebGPUBackend ? "WebGPU" : "WebGL 2");
@@ -820,6 +962,7 @@ function GlobeThree({
       canvas.removeEventListener("wheel", handleWheel);
       satellites.dispose();
       card?.dispose();
+      list?.dispose();
       earth?.dispose();
       map?.dispose();
       renderer.dispose();

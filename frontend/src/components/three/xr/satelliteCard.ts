@@ -11,15 +11,20 @@ import { createCanvasLayer } from "./canvasLayer";
 import {
   BADGE_COLORS,
   BADGE_HEIGHT,
+  CLOSE_SIZE,
   COLORS,
+  GRAB_SPACE,
   LINE_HEIGHT,
   TEXT_SIZE,
   TITLE_SIZE,
   VALUE_SIZE,
   badgeWidth,
   drawBadge,
+  drawCloseButton,
+  drawGrabBar,
   drawText,
-  font,
+  isOnCloseButton,
+  isOnGrabBar,
 } from "./panelStyle";
 
 // Layout, in layout pixels. The page's card is one 300px column; in the room the four sections
@@ -36,17 +41,9 @@ const METRIC_GAP_Y = 10;
 const METRIC_WIDTH = (COLUMN_WIDTH - METRIC_GAP_X) / 2;
 const METRIC_HEIGHT = (TEXT_SIZE + VALUE_SIZE) * LINE_HEIGHT;
 const SECTION_GAP = 12;
-const CLOSE_SIZE = 32;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
-// The grab bar for moving the card, a pill centered under it in the style of Horizon OS and
-// visionOS windows. Its hit area reaches GRAB_SLOP past it on every side but the card's.
-const GRAB_GAP = 12;
-const GRAB_WIDTH = 120;
-const GRAB_HEIGHT = 8;
-const GRAB_SLOP = 14;
-const GRAB_X = (WIDTH - GRAB_WIDTH) / 2;
-const LAYER_HEIGHT = MAX_HEIGHT + GRAB_GAP + GRAB_HEIGHT + GRAB_SLOP;
+const LAYER_HEIGHT = MAX_HEIGHT + GRAB_SPACE;
 
 // About 1.5 canvas pixels per display pixel at the card's distance, and 1mm per layout pixel, so
 // the 14.4px body text is about 0.8 degrees tall from a meter away.
@@ -205,20 +202,7 @@ export function createXRSatelliteCard(
     ctx.fillStyle = COLORS.muted;
     drawText(ctx, details.subtitle, PADDING, PADDING + nameHeight + 2, TEXT_SIZE, 400, CLOSE_X - 8 - PADDING);
 
-    ctx.beginPath();
-    ctx.roundRect(CLOSE_X + 0.5, CLOSE_Y + 0.5, CLOSE_SIZE - 1, CLOSE_SIZE - 1, 8);
-    if (closeHovered) {
-      ctx.fillStyle = COLORS.hover;
-      ctx.fill();
-    }
-    ctx.strokeStyle = COLORS.buttonBorder;
-    ctx.stroke();
-    ctx.fillStyle = COLORS.buttonText;
-    ctx.font = font(20);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("×", CLOSE_X + CLOSE_SIZE / 2, CLOSE_Y + CLOSE_SIZE / 2 + 1);
-    ctx.textAlign = "left";
+    drawCloseButton(ctx, CLOSE_X, CLOSE_Y, closeHovered);
 
     badgeRows.forEach((row, i) => {
       for (const badge of row) {
@@ -233,12 +217,7 @@ export function createXRSatelliteCard(
     drawSection(ctx, c, details, PADDING, secondRowTop);
     drawSection(ctx, d, details, rightX, secondRowTop);
 
-    // The grab bar brightens and widens a little under a ray or while dragged.
-    const grabGrow = grabHighlighted ? 12 : 0;
-    ctx.fillStyle = grabHighlighted ? COLORS.grabActive : COLORS.grab;
-    ctx.beginPath();
-    ctx.roundRect(GRAB_X - grabGrow, height + GRAB_GAP, GRAB_WIDTH + 2 * grabGrow, GRAB_HEIGHT, GRAB_HEIGHT / 2);
-    ctx.fill();
+    drawGrabBar(ctx, WIDTH, height, grabHighlighted);
   }
 
   /** Shows the card for this satellite, or hides it for null. */
@@ -271,14 +250,9 @@ export function createXRSatelliteCard(
     if (!hit) return null;
     const { x, y, local, distance } = hit;
     if (y > height) {
-      const onGrab =
-        x >= GRAB_X - GRAB_SLOP &&
-        x <= GRAB_X + GRAB_WIDTH + GRAB_SLOP &&
-        y <= height + GRAB_GAP + GRAB_HEIGHT + GRAB_SLOP;
-      return onGrab ? { region: "grab", local, distance } : null;
+      return isOnGrabBar(x, y, WIDTH, height) ? { region: "grab", local, distance } : null;
     }
-    const onClose =
-      x >= CLOSE_X && x <= CLOSE_X + CLOSE_SIZE && y >= CLOSE_Y && y <= CLOSE_Y + CLOSE_SIZE;
+    const onClose = isOnCloseButton(x, y, CLOSE_X, CLOSE_Y);
     return { region: onClose ? "close" : "card", local, distance };
   }
 
