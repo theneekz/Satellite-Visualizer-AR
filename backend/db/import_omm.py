@@ -51,6 +51,7 @@ def to_row(record: dict) -> dict:
 
 @time_function
 def main(path: str) -> None:
+    # TODO: check if most recent epoch is <2 days old. If not, make API call to https://spacebook.com/api/entity/omm/json with rate limiter
     with open(path) as f:
         records = json.load(f)
 
