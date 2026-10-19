@@ -11,14 +11,14 @@ Interactive web app for visualizing satellites and NEOs (Near Earth Objects) orb
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend 3D | WebGPU (high-performance GPU rendering) |
-| Frontend UI | React + Tailwind |
-| Backend | Python + FastAPI |
-| Orbital Math | skyfield + sgp4 |
-| Data Source | CelesTrak TLE API |
-| Database | PostgreSQL |
+| Layer        | Technology                                     |
+| ------------ | ---------------------------------------------- |
+| Frontend 3D  | WebGPU, Three.js (for performance comparison!) |
+| Frontend UI  | React                                          |
+| Backend      | Python + FastAPI                               |
+| Orbital Math | skyfield + sgp4                                |
+| Data Source  | Spacebook                                      |
+| Database     | PostgreSQL                                     |
 
 ## Project Structure
 
