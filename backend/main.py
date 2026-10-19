@@ -254,34 +254,3 @@ def get_positions_v2(request: Request):
             "Cache-Control": "no-store",
         }
     )
-
-
-# try:
-#     headers = {
-#         'User-Agent': 'SatViz/1.0 (contact: nicholascsward@gmail.com)'}
-#     response = requests.get(
-#         STATIONS_URL,
-#         headers=headers,
-#         timeout=30
-#     )
-
-#     if response.status_code == 200:
-#         with open(CACHE_FILE, "w") as f:
-#             f.write(response.text)
-#         return response.text
-#     else:
-#         raise Exception(f"HTTP Error {response.status_code}")
-# except requests.RequestException as e:
-#     logger.error(f"Error fetching TLE data from CelesTrak: {e}")
-#     return None
-
-
-@app.get("/test")
-def test_api():
-    if os.path.exists("spacebook_omm_2026-09-21.json"):
-        with open("spacebook_omm_2026-09-21.json") as f:
-            j = json.load(f)
-            with_comments = [omm["COMMENT"]
-                             for omm in list(j) if omm["COMMENT"] != ""]
-            return len(with_comments)
-    return

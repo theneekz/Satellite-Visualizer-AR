@@ -1,3 +1,17 @@
-.venv
-__pycache__
+# Python
+.venv/
+venv/
+__pycache__/
+
+# Generated protobuf
 *_pb.ts
+
+# Local config and secrets
+.env
+.env.*
+.vscode/
+.claude/settings.local.json
+.DS_Store
+
+# Raw data dumps (see README for how to download)
+backend/spacebook_*.json
