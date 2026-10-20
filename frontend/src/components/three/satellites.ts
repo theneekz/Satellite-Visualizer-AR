@@ -30,13 +30,16 @@ import {
   type PositionsSnapshot,
 } from "../../api/satellites";
 import { EARTH_RADIUS_KM } from "../../constants";
+import {
+  SATELLITE_SIZE_PX,
+  pickNearest,
+  scenePositionAt,
+  segmentHitsGlobe,
+} from "../satelliteScene";
 
-const SATELLITE_SIZE_PX = 12;
 // In XR, satellites are sized by angle rather than pixels: this is the square's full width, about
 // what SATELLITE_SIZE_PX spans on a desktop screen.
 const SATELLITE_SIZE_XR_RAD = 0.01;
-// A click selects the nearest satellite within this many pixels.
-const PICK_RADIUS_PX = 10;
 // An XR controller ray selects the satellite nearest its aim within this angle (about 1.5 degrees).
 const PICK_RAY_ANGLE_RAD = 0.026;
 
@@ -44,28 +47,6 @@ const PICK_RAY_ANGLE_RAD = 0.026;
 const QUAD_CORNERS = new Float32Array([
   -1, -1, 0, 1, -1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1, 1, 0,
 ]);
-
-/**
- * Whether the segment from (ox, oy, oz) to (ox + dx, oy + dy, oz + dz) passes through the unit
- * globe at the origin, i.e. whether the globe hides its far end from its near end.
- */
-function segmentHitsGlobe(
-  ox: number,
-  oy: number,
-  oz: number,
-  dx: number,
-  dy: number,
-  dz: number
-) {
-  const t = Math.min(
-    1,
-    Math.max(0, -(ox * dx + oy * dy + oz * dz) / (dx * dx + dy * dy + dz * dz))
-  );
-  const cx = ox + dx * t;
-  const cy = oy + dy * t;
-  const cz = oz + dz * t;
-  return cx * cx + cy * cy + cz * cz < 1;
-}
 
 /**
  * Every satellite as one instanced draw of screen-facing squares. Each instance holds its polled
@@ -228,12 +209,7 @@ export function createSatellites() {
 
   /** The drawn position (inertial group space, Earth radius = 1) of instance `index`, into `out`. */
   function positionAt(index: number, out: number[]) {
-    const data = instanceBuffer!.array as Float32Array;
-    const o = index * FLOATS_PER_SATELLITE;
-    const t = dt.value;
-    out[0] = (data[o] + data[o + 3] * t) / EARTH_RADIUS_KM;
-    out[1] = (data[o + 2] + data[o + 5] * t) / EARTH_RADIUS_KM;
-    out[2] = -(data[o + 1] + data[o + 4] * t) / EARTH_RADIUS_KM;
+    scenePositionAt(instanceBuffer!.array, index, dt.value, out);
   }
   const scratch = [0, 0, 0];
 
@@ -259,34 +235,18 @@ export function createSatellites() {
     px: number,
     py: number
   ): number | null {
-    const m = mvp.elements;
-    const r = model.elements;
-    let best = -1;
-    let bestDist2 = PICK_RADIUS_PX * PICK_RADIUS_PX;
-
-    for (let i = 0; i < count; i++) {
-      positionAt(i, scratch);
-      const [x, y, z] = scratch;
-
-      const w = m[3] * x + m[7] * y + m[11] * z + m[15];
-      if (w <= 0) continue;
-      const ndcX = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
-      const ndcY = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
-      const dx = (ndcX * 0.5 + 0.5) * viewportWidth - px;
-      const dy = (0.5 - ndcY * 0.5) * viewportHeight - py;
-      const dist2 = dx * dx + dy * dy;
-      if (dist2 >= bestDist2) continue;
-
-      // Hidden if the segment from the camera (0, 0, cameraDistance) to the satellite passes
-      // through the unit globe.
-      const wx = r[0] * x + r[4] * y + r[8] * z;
-      const wy = r[1] * x + r[5] * y + r[9] * z;
-      const wz = r[2] * x + r[6] * y + r[10] * z - cameraDistance;
-      if (segmentHitsGlobe(0, 0, cameraDistance, wx, wy, wz)) continue;
-
-      best = i;
-      bestDist2 = dist2;
-    }
+    const best = pickNearest(
+      instanceBuffer!.array,
+      count,
+      dt.value,
+      mvp.elements,
+      model.elements,
+      cameraDistance,
+      viewportWidth,
+      viewportHeight,
+      px,
+      py
+    );
     return best === -1 ? null : ids[best];
   }
 

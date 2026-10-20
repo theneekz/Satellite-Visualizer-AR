@@ -3,10 +3,12 @@ import {
   type PositionsSnapshot,
 } from "../api/satellites";
 import { EARTH_RADIUS_KM } from "../constants";
+import {
+  SATELLITE_SIZE_PX,
+  pickNearest,
+  scenePositionAt,
+} from "./satelliteScene";
 
-const SATELLITE_SIZE_PX = 12;
-// A click selects the nearest satellite within this many pixels.
-const PICK_RADIUS_PX = 10;
 // Demo only: real-time LEO motion is barely visible, so run the simulation faster.
 const TIME_SCALE = 1;
 
@@ -191,24 +193,14 @@ export function createSatelliteRenderer(
     device.queue.writeBuffer(instanceBuffer, 0, instanceData);
   }
 
-  /** A satellite's current position in globe units (Earth radius = 1), written into `out`. */
-  function scenePositionAt(index: number, dt: number, out: number[]) {
-    const o = index * FLOATS_PER_SATELLITE;
-    // The same position the vertex shader computes.
-    const gx = instanceData[o] + instanceData[o + 3] * dt;
-    const gy = instanceData[o + 1] + instanceData[o + 4] * dt;
-    const gz = instanceData[o + 2] + instanceData[o + 5] * dt;
-    out[0] = gx / EARTH_RADIUS_KM;
-    out[1] = gz / EARTH_RADIUS_KM;
-    out[2] = -gy / EARTH_RADIUS_KM;
-  }
   const scratch = [0, 0, 0];
 
   /** Where the satellite with this id is right now in globe units, or null if it isn't drawn. */
   function scenePosition(id: number): [number, number, number] | null {
     const index = indexById.get(id);
     if (index === undefined) return null;
-    scenePositionAt(index, (simTimeMs - snapshotTimeMs) / 1000, scratch);
+    const dt = (simTimeMs - snapshotTimeMs) / 1000;
+    scenePositionAt(instanceData, index, dt, scratch);
     return [scratch[0], scratch[1], scratch[2]];
   }
 
@@ -233,40 +225,18 @@ export function createSatelliteRenderer(
     px: number,
     py: number
   ): number | null {
-    const dt = (simTimeMs - snapshotTimeMs) / 1000;
-    let best = -1;
-    let bestDist2 = PICK_RADIUS_PX * PICK_RADIUS_PX;
-
-    for (let i = 0; i < count; i++) {
-      scenePositionAt(i, dt, scratch);
-      const [x, y, z] = scratch;
-
-      const w = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
-      if (w <= 0) continue;
-      const ndcX = (mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12]) / w;
-      const ndcY = (mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13]) / w;
-      const dx = (ndcX * 0.5 + 0.5) * viewportWidth - px;
-      const dy = (0.5 - ndcY * 0.5) * viewportHeight - py;
-      const dist2 = dx * dx + dy * dy;
-      if (dist2 >= bestDist2) continue;
-
-      // Hidden if the line from the camera (0, 0, cameraDistance) to the satellite passes
-      // through the unit globe.
-      const wx = model[0] * x + model[4] * y + model[8] * z;
-      const wy = model[1] * x + model[5] * y + model[9] * z;
-      const wz = model[2] * x + model[6] * y + model[10] * z - cameraDistance;
-      const t = Math.min(
-        1,
-        Math.max(0, -(cameraDistance * wz) / (wx * wx + wy * wy + wz * wz))
-      );
-      const cx = wx * t;
-      const cy = wy * t;
-      const cz = cameraDistance + wz * t;
-      if (cx * cx + cy * cy + cz * cz < 1) continue;
-
-      best = i;
-      bestDist2 = dist2;
-    }
+    const best = pickNearest(
+      instanceData,
+      count,
+      (simTimeMs - snapshotTimeMs) / 1000,
+      mvp,
+      model,
+      cameraDistance,
+      viewportWidth,
+      viewportHeight,
+      px,
+      py
+    );
     return best === -1 ? null : ids[best];
   }
 

@@ -10,6 +10,11 @@ import {
   type FilterOptions,
   type SatelliteFilters,
 } from "../../../filters";
+import {
+  CURRENT_YEAR,
+  FIRST_LAUNCH_YEAR,
+  SEARCH_DEBOUNCE_MS,
+} from "../../../constants";
 import { sentenceCase } from "../../../format";
 import { createCanvasLayer } from "./canvasLayer";
 import {
@@ -17,6 +22,9 @@ import {
   COLORS,
   GRAB_SPACE,
   LINE_HEIGHT,
+  METERS_PER_PIXEL,
+  PADDING,
+  PIXEL_RATIO,
   TEXT_SIZE,
   TITLE_SIZE,
   drawCloseButton,
@@ -30,7 +38,6 @@ import {
 // Layout, in layout pixels. Rows are taller than the page's 34px so a ray can pick one easily.
 const WIDTH = 400;
 const HEIGHT = 860;
-const PADDING = 20;
 const INNER_WIDTH = WIDTH - 2 * PADDING;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
@@ -52,9 +59,6 @@ const TRACK_HEIGHT = 4;
 const HANDLE_RADIUS = 10;
 const SLIDER_LEFT = PADDING + HANDLE_RADIUS;
 const SLIDER_RIGHT = WIDTH - PADDING - HANDLE_RADIUS;
-// The first catalogued launch (Sputnik 1).
-const YEAR_MIN = 1957;
-const YEAR_MAX = new Date().getUTCFullYear();
 const ROW_HEIGHT = 40;
 const ROW_PADDING_X = 8;
 const SCROLLBAR_WIDTH = 4;
@@ -62,13 +66,6 @@ const SCROLLBAR_MIN_HEIGHT = 24;
 // The rows leave a gutter on the right for the scrollbar.
 const ROWS_RIGHT = WIDTH - PADDING - SCROLLBAR_WIDTH - 6;
 const LAYER_HEIGHT = HEIGHT + GRAB_SPACE;
-
-// Matching the card: about 1.5 canvas pixels per display pixel, and 1mm per layout pixel.
-const PIXEL_RATIO = 1.5;
-const METERS_PER_PIXEL = 0.001;
-
-// Typing is debounced like the page's search, so a burst of keys causes one filter pass.
-const SEARCH_DEBOUNCE_MS = 250;
 
 type ChipFilter = "objectType" | "size";
 
@@ -124,13 +121,14 @@ function yearAt(x: number) {
     1,
     Math.max(0, (x - SLIDER_LEFT) / (SLIDER_RIGHT - SLIDER_LEFT))
   );
-  return Math.round(YEAR_MIN + t * (YEAR_MAX - YEAR_MIN));
+  return Math.round(FIRST_LAUNCH_YEAR + t * (CURRENT_YEAR - FIRST_LAUNCH_YEAR));
 }
 
 function sliderX(year: number) {
   return (
     SLIDER_LEFT +
-    ((year - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * (SLIDER_RIGHT - SLIDER_LEFT)
+    ((year - FIRST_LAUNCH_YEAR) / (CURRENT_YEAR - FIRST_LAUNCH_YEAR)) *
+      (SLIDER_RIGHT - SLIDER_LEFT)
   );
 }
 
@@ -298,8 +296,8 @@ export function createXRSatelliteList(
     if (sliderDrag) return { from: sliderDrag.from, to: sliderDrag.to };
     if (pendingYears) return pendingYears;
     return {
-      from: filters?.yearFrom ?? YEAR_MIN,
-      to: filters?.yearTo ?? YEAR_MAX,
+      from: filters?.yearFrom ?? FIRST_LAUNCH_YEAR,
+      to: filters?.yearTo ?? CURRENT_YEAR,
     };
   }
 
@@ -756,8 +754,8 @@ export function createXRSatelliteList(
       const { from, to } = sliderDrag;
       sliderDrag = null;
       // The ends of the range mean no limit, so satellites with unknown years stay listed.
-      const yearFrom = from === YEAR_MIN ? null : from;
-      const yearTo = to === YEAR_MAX ? null : to;
+      const yearFrom = from === FIRST_LAUNCH_YEAR ? null : from;
+      const yearTo = to === CURRENT_YEAR ? null : to;
       // App keeps its filters when nothing changed, so only wait for a change it will make.
       if (yearFrom !== filters?.yearFrom || yearTo !== filters?.yearTo)
         pendingYears = { from, to };

@@ -6,9 +6,12 @@ import {
 } from "../filters";
 import { sentenceCase } from "../format";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import {
+  CURRENT_YEAR,
+  FIRST_LAUNCH_YEAR,
+  SEARCH_DEBOUNCE_MS,
+} from "../constants";
 import "./SatelliteFilterBar.css";
-
-const DEBOUNCE_MS = 250;
 
 // Ignore partial input like "19" until it is a full four-digit year.
 function parseYear(value: string) {
@@ -39,9 +42,9 @@ function SatelliteFilterBar({
     filters.yearTo?.toString() ?? ""
   );
 
-  const query = useDebouncedValue(queryInput, DEBOUNCE_MS);
-  const from = useDebouncedValue(fromYearInput, DEBOUNCE_MS);
-  const to = useDebouncedValue(toYearInput, DEBOUNCE_MS);
+  const query = useDebouncedValue(queryInput, SEARCH_DEBOUNCE_MS);
+  const from = useDebouncedValue(fromYearInput, SEARCH_DEBOUNCE_MS);
+  const to = useDebouncedValue(toYearInput, SEARCH_DEBOUNCE_MS);
 
   useEffect(() => onChange({ query: query.trim() }), [query, onChange]);
   useEffect(() => onChange({ yearFrom: parseYear(from) }), [from, onChange]);
@@ -109,7 +112,7 @@ function SatelliteFilterBar({
             className="satellite-filters__control"
             inputMode="numeric"
             maxLength={4}
-            placeholder="1957"
+            placeholder={String(FIRST_LAUNCH_YEAR)}
             value={fromYearInput}
             onChange={(e) => setFromYearInput(e.target.value)}
           />
@@ -120,7 +123,7 @@ function SatelliteFilterBar({
             className="satellite-filters__control"
             inputMode="numeric"
             maxLength={4}
-            placeholder="2026"
+            placeholder={String(CURRENT_YEAR)}
             value={toYearInput}
             onChange={(e) => setToYearInput(e.target.value)}
           />
