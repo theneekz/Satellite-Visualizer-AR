@@ -1,12 +1,10 @@
 import { daysSinceJ2000 } from "../utilities";
 
 /**
- * Unit vector from Earth toward the Sun at `epochMs` (Unix epoch milliseconds, UTC), in the same
- * inertial axes as the satellites (X toward the equinox, Z toward the north pole).
+ * Unit vector from Earth toward the Sun at `epochMs` for lighting.
  *
- * Uses the Astronomical Almanac's low-precision solar position (about 0.01 degrees, fine for
- * lighting). It gives the direction in the equatorial frame of date, which differs from GCRS only
- * by precession (well under a degree), the same simplification the Earth rotation makes.
+ * Uses the Astronomical Almanac's low-precision solar position, which differs from GCRS only
+ * by precession (Earth's slow wobble).
  */
 export function sunDirection(epochMs: number): [number, number, number] {
   const n = daysSinceJ2000(epochMs);
