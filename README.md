@@ -2,6 +2,9 @@
 
 Interactive web app for visualizing satellites and NEOs (Near Earth Objects) orbiting Earth in real-time.
 
+Current functionality: https://www.youtube.com/watch?v=2WOAVaL3KC0
+<img width="480" height="480" alt="satviz" src="https://github.com/user-attachments/assets/8b941c1f-8cd3-4209-9a7f-afa6783933ec" />
+
 ## Features
 
 - 3D globe with live satellite positions
@@ -32,7 +35,7 @@ SatViz/
 
 ## Getting Started
 
-See `docs/SatViz DD.md` for full technical details, architecture, and roadmap.
+TODO! See `docs/SatViz DD.md` for full technical details, architecture, and roadmap.
 
 ## Roadmap
 
