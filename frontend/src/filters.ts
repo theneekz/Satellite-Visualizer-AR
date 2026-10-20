@@ -1,9 +1,12 @@
 import type { SatelliteInfo } from "./api/satellites";
 
 export interface SatelliteFilters {
-  query: string; // matches name or NORAD id
-  objectType: string; // '' means any
-  size: string; // '' means any
+  // Matches name or NORAD id.
+  query: string;
+  // '' means any.
+  objectType: string;
+  // '' means any.
+  size: string;
   yearFrom: number | null;
   yearTo: number | null;
 }
@@ -28,7 +31,7 @@ export const typeOf = (satellite: SatelliteInfo) =>
   satellite.object_type ?? "UNKNOWN";
 export const sizeOf = (satellite: SatelliteInfo) => satellite.rcs ?? "UNKNOWN";
 
-/** The launch year from the international designator (1998-067A -> 1998), or null. */
+// The launch year from the international designator (1998-067A -> 1998), or null.
 export function launchYear(satellite: SatelliteInfo): number | null {
   const match = /^(\d{4})-/.exec(satellite.designator);
   return match ? Number(match[1]) : null;
@@ -75,7 +78,7 @@ export function filterSatellites(
   });
 }
 
-/** The values present in the data, for the filter dropdowns. */
+// The values present in the data for the filter dropdowns.
 export function getFilterOptions(satellites: SatelliteInfo[]): FilterOptions {
   const objectTypes = new Set<string>();
   const sizes = new Set<string>();
