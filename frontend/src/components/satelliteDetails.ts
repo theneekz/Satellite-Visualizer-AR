@@ -6,6 +6,7 @@ import {
 import { sentenceCase } from "../format";
 import { computeLiveState, type LiveState } from "./liveState";
 import { DAY_MS } from "../constants";
+import { getLaunchYear } from "../utilities";
 
 /**
  * The satellite card's contents, shared by the page's card (SatelliteCard) and the XR card
@@ -76,7 +77,7 @@ export function satelliteDetails(
   live: LiveState | null,
   nowMs: number
 ): SatelliteDetails {
-  const launchYear = /^(\d{4})-/.exec(satellite.designator)?.[1];
+  const launchYear = getLaunchYear(satellite);
   const badges: DetailBadge[] = [];
   if (satellite.object_type) {
     badges.push({ text: sentenceCase(satellite.object_type), tone: "type" });

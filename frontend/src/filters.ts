@@ -1,4 +1,5 @@
 import type { SatelliteInfo } from "./api/satellites";
+import { getLaunchYear } from "./utilities";
 
 export interface SatelliteFilters {
   // Matches name or NORAD id.
@@ -30,12 +31,6 @@ const SIZE_ORDER = ["SMALL", "MEDIUM", "LARGE"];
 export const typeOf = (satellite: SatelliteInfo) =>
   satellite.object_type ?? "UNKNOWN";
 export const sizeOf = (satellite: SatelliteInfo) => satellite.rcs ?? "UNKNOWN";
-
-// The launch year from the international designator (1998-067A -> 1998), or null.
-export function launchYear(satellite: SatelliteInfo): number | null {
-  const match = /^(\d{4})-/.exec(satellite.designator);
-  return match ? Number(match[1]) : null;
-}
 
 export function isFiltering(filters: SatelliteFilters) {
   return (
@@ -69,7 +64,7 @@ export function filterSatellites(
     if (filters.size && sizeOf(satellite) !== filters.size) return false;
     if (yearFrom !== null || yearTo !== null) {
       // Satellites with an unparseable designator can't satisfy a year filter.
-      const year = launchYear(satellite);
+      const year = getLaunchYear(satellite);
       if (year === null) return false;
       if (yearFrom !== null && year < yearFrom) return false;
       if (yearTo !== null && year > yearTo) return false;
