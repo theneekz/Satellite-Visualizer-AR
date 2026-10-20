@@ -2,8 +2,8 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../api/satellites";
+import { EARTH_RADIUS_KM } from "../constants";
 
-const EARTH_RADIUS_KM = 6371;
 const SATELLITE_SIZE_PX = 12;
 // A click selects the nearest satellite within this many pixels.
 const PICK_RADIUS_PX = 10;
@@ -40,7 +40,7 @@ const SHADER_SOURCE = /* wgsl */ `
     let gcrs = position + velocity * uniforms.dt;
     // GCRS has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
     // then km are scaled so the Earth's radius is 1 like the globe mesh.
-    let world = vec3f(gcrs.x, gcrs.z, -gcrs.y) / ${EARTH_RADIUS_KM.toFixed(1)};
+    let world = vec3f(gcrs.x, gcrs.z, -gcrs.y) / ${EARTH_RADIUS_KM};
     let clip = uniforms.mvp * vec4f(world, 1.0);
     // The selected satellite is drawn twice as large.
     let isSelected = i32(instanceIndex) == uniforms.selectedIndex;

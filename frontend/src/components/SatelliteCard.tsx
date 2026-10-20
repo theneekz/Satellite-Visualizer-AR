@@ -8,9 +8,7 @@ import {
   type DetailMetric,
 } from "./satelliteDetails";
 import "./SatelliteCard.css";
-
-const EARTH_RADIUS_KM = 6378.137;
-const DAY_MS = 86400000;
+import { DAY_MS, EARTH_RADIUS_KM } from "../constants";
 
 function Metric({ label, value }: DetailMetric) {
   return (

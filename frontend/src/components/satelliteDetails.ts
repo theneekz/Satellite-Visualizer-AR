@@ -5,13 +5,12 @@ import {
 } from "../api/satellites";
 import { sentenceCase } from "../format";
 import { computeLiveState, type LiveState } from "./liveState";
+import { DAY_MS } from "../constants";
 
 /**
  * The satellite card's contents, shared by the page's card (SatelliteCard) and the XR card
  * (three/xr/satelliteCard), so both always show the same data.
  */
-
-const DAY_MS = 86400000;
 
 export function fmt(value: number, digits = 0) {
   return value.toLocaleString(undefined, {
@@ -20,9 +19,9 @@ export function fmt(value: number, digits = 0) {
   });
 }
 
-export type AgeLevel = "fresh" | "aging" | "stale";
-
 // Older element sets mean less accurate positions.
+type AgeLevel = "fresh" | "aging" | "stale";
+
 export function elementAge(epochMs: number, nowMs: number) {
   const days = (nowMs - epochMs) / DAY_MS;
   const text =

@@ -29,9 +29,8 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../../api/satellites";
+import { EARTH_RADIUS_KM } from "../../constants";
 
-// Same values as the WebGPU renderer (components/satellite.ts), so the two look identical.
-const EARTH_RADIUS_KM = 6371;
 const SATELLITE_SIZE_PX = 12;
 // In XR, satellites are sized by angle rather than pixels: this is the square's full width, about
 // what SATELLITE_SIZE_PX spans on a desktop screen.
