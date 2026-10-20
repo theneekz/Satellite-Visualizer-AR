@@ -15,11 +15,13 @@ function SatelliteList({
   children,
 }: {
   satellites: SatelliteInfo[];
-  totalCount: number; // size of the unfiltered list
+  // Size of the unfiltered list.
+  totalCount: number;
   loading: boolean;
   selectedId: number | null;
   onSelect: (id: number) => void;
-  children?: ReactNode; // search and filter controls, shown above the rows
+  // Search and filter controls, shown above the rows.
+  children?: ReactNode;
 }) {
   // Only the rows in (or near) view are rendered, so the DOM stays small for any list size.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -60,7 +62,6 @@ function SatelliteList({
         </p>
       ) : (
         <div className="satellite-list__items" ref={scrollRef}>
-          {/* Full-height list so the scrollbar matches every row; visible rows are positioned in it. */}
           <ul
             className="satellite-list__rows"
             style={{ height: virtualizer.getTotalSize() }}
