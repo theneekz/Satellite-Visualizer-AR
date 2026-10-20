@@ -10,6 +10,24 @@ export const TEXT_SIZE = 14.4;
 export const TITLE_SIZE = 18;
 export const VALUE_SIZE = 16.2;
 
+export const FONT_WEIGHT_REGULAR = 400;
+export const FONT_WEIGHT_MEDIUM = 500;
+export const FONT_WEIGHT_SEMIBOLD = 600;
+
+// Corner radii: badges, controls (buttons and inputs), and the panels themselves.
+const BADGE_RADIUS = 6;
+export const CONTROL_RADIUS = 8;
+export const PANEL_RADIUS = 12;
+
+// Canvas draws a 1-pixel stroke centered on its path. Offsetting the path by half a pixel puts
+// the stroke on whole pixels, so it stays sharp instead of blurring across two.
+export const HALF_PIXEL = 0.5;
+
+// The space between a panel's title and its close button.
+export const TITLE_GAP = 8;
+// The space between badges, across and down.
+export const BADGE_GAP = 6;
+
 export const COLORS = {
   // Opaque, unlike the page's translucent panels: a layer composites behind the scene, so
   // translucency would show the room or black rather than the globe.
@@ -65,10 +83,15 @@ export const BADGE_COLORS = {
   stale: { text: "#f7c1c1", background: "rgba(226, 75, 74, 0.25)" },
 };
 
-export const BADGE_HEIGHT = TEXT_SIZE * LINE_HEIGHT + 4;
 const BADGE_PADDING_X = 8;
+const BADGE_PADDING_Y = 2;
+export const BADGE_HEIGHT = TEXT_SIZE * LINE_HEIGHT + 2 * BADGE_PADDING_Y;
 
-export function font(size: number, weight = 400) {
+const CLOSE_ICON_SIZE = 20;
+// The grab bar widens by this much on each side under a ray or while dragged.
+const GRAB_HIGHLIGHT_GROW = 12;
+
+export function font(size: number, weight = FONT_WEIGHT_REGULAR) {
   return `${weight} ${size}px ${FONT_FAMILY}`;
 }
 
@@ -82,7 +105,7 @@ export function drawText(
   x: number,
   y: number,
   size: number,
-  weight = 400,
+  weight = FONT_WEIGHT_REGULAR,
   maxWidth = Infinity
 ) {
   ctx.font = font(size, weight);
@@ -120,10 +143,10 @@ export function drawBadge(
   const width = badgeWidth(ctx, text);
   ctx.fillStyle = colors.background;
   ctx.beginPath();
-  ctx.roundRect(x, y, width, BADGE_HEIGHT, 6);
+  ctx.roundRect(x, y, width, BADGE_HEIGHT, BADGE_RADIUS);
   ctx.fill();
   ctx.fillStyle = colors.text;
-  drawText(ctx, text, x + BADGE_PADDING_X, y + 2, TEXT_SIZE);
+  drawText(ctx, text, x + BADGE_PADDING_X, y + BADGE_PADDING_Y, TEXT_SIZE);
   return width;
 }
 
@@ -135,7 +158,13 @@ export function drawCloseButton(
   hovered: boolean
 ) {
   ctx.beginPath();
-  ctx.roundRect(x + 0.5, y + 0.5, CLOSE_SIZE - 1, CLOSE_SIZE - 1, 8);
+  ctx.roundRect(
+    x + HALF_PIXEL,
+    y + HALF_PIXEL,
+    CLOSE_SIZE - 1,
+    CLOSE_SIZE - 1,
+    CONTROL_RADIUS
+  );
   if (hovered) {
     ctx.fillStyle = COLORS.hover;
     ctx.fill();
@@ -144,9 +173,10 @@ export function drawCloseButton(
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.fillStyle = COLORS.buttonText;
-  ctx.font = font(20);
+  ctx.font = font(CLOSE_ICON_SIZE);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  // The × sits slightly high in the font's em box, so nudge it down a pixel to look centered.
   ctx.fillText("×", x + CLOSE_SIZE / 2, y + CLOSE_SIZE / 2 + 1);
   ctx.textAlign = "left";
 }
@@ -175,7 +205,7 @@ export function drawGrabBar(
   panelHeight: number,
   highlighted: boolean
 ) {
-  const grow = highlighted ? 12 : 0;
+  const grow = highlighted ? GRAB_HIGHLIGHT_GROW : 0;
   ctx.fillStyle = highlighted ? COLORS.grabActive : COLORS.grab;
   ctx.beginPath();
   ctx.roundRect(
