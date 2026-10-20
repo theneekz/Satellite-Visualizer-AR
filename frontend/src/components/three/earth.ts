@@ -5,7 +5,16 @@ import {
   Vector3,
   type Texture,
 } from "three/webgpu";
-import { dot, float, max, mix, normalWorld, smoothstep, texture, uniform } from "three/tsl";
+import {
+  dot,
+  float,
+  max,
+  mix,
+  normalWorld,
+  smoothstep,
+  texture,
+  uniform,
+} from "three/tsl";
 
 /**
  * The textured Earth, lit by the Sun with a soft terminator and a dim night side (the same

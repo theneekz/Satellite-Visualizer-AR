@@ -1,4 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { getSatellites, type SatelliteInfo } from "./api/satellites";
 import Globe from "./components/Globe";
 import SatelliteCard from "./components/SatelliteCard";

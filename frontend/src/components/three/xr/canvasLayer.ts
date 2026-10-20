@@ -47,7 +47,10 @@ export interface CanvasLayerOptions {
  *
  * The canvas is redrawn only after `invalidate`, on the next `update`.
  */
-export function createCanvasLayer(renderer: WebGPURenderer, options: CanvasLayerOptions) {
+export function createCanvasLayer(
+  renderer: WebGPURenderer,
+  options: CanvasLayerOptions
+) {
   const { width, height, pixelRatio, metersPerPixel, draw } = options;
 
   const canvas = document.createElement("canvas");
@@ -65,7 +68,10 @@ export function createCanvasLayer(renderer: WebGPURenderer, options: CanvasLayer
   const layerScene = new Scene();
   const layerCamera = new OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.1, 10);
   layerCamera.position.z = 1;
-  const material = new MeshBasicNodeMaterial({ map: texture, toneMapped: false });
+  const material = new MeshBasicNodeMaterial({
+    map: texture,
+    toneMapped: false,
+  });
   // Written as-is, alpha included, into the cleared layer.
   material.blending = NoBlending;
   const quad = new Mesh(new PlaneGeometry(1, 1), material);
@@ -179,7 +185,15 @@ export function createCanvasLayer(renderer: WebGPURenderer, options: CanvasLayer
     plane.geometry.dispose();
   }
 
-  return { object, setVisible, setUsesLayers, invalidate, update, hitTest, dispose };
+  return {
+    object,
+    setVisible,
+    setUsesLayers,
+    invalidate,
+    update,
+    hitTest,
+    dispose,
+  };
 }
 
 export type CanvasLayer = ReturnType<typeof createCanvasLayer>;

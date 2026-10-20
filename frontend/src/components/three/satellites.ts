@@ -25,7 +25,10 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
-import { FLOATS_PER_SATELLITE, type PositionsSnapshot } from "../../api/satellites";
+import {
+  FLOATS_PER_SATELLITE,
+  type PositionsSnapshot,
+} from "../../api/satellites";
 
 // Same values as the WebGPU renderer (components/satellite.ts), so the two look identical.
 const EARTH_RADIUS_KM = 6371;
@@ -40,16 +43,25 @@ const PICK_RAY_ANGLE_RAD = 0.026;
 
 // One quad as two triangles; each corner is offset in screen space by the vertex shader.
 const QUAD_CORNERS = new Float32Array([
-  -1, -1, 0, 1, -1, 0, -1, 1, 0,
-  -1, 1, 0, 1, -1, 0, 1, 1, 0,
+  -1, -1, 0, 1, -1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1, 1, 0,
 ]);
 
 /**
  * Whether the segment from (ox, oy, oz) to (ox + dx, oy + dy, oz + dz) passes through the unit
  * globe at the origin, i.e. whether the globe hides its far end from its near end.
  */
-function segmentHitsGlobe(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number) {
-  const t = Math.min(1, Math.max(0, -(ox * dx + oy * dy + oz * dz) / (dx * dx + dy * dy + dz * dz)));
+function segmentHitsGlobe(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number
+) {
+  const t = Math.min(
+    1,
+    Math.max(0, -(ox * dx + oy * dy + oz * dz) / (dx * dx + dy * dy + dz * dz))
+  );
   const cx = ox + dx * t;
   const cy = oy + dy * t;
   const cz = oz + dz * t;
@@ -72,7 +84,9 @@ export function createSatellites() {
   const angularSizing = uniform(0);
 
   const isSelected = instanceIndex.toFloat().equal(selectedIndex);
-  const gcrs = attribute("satPosition", "vec3").add(attribute("satVelocity", "vec3").mul(dt));
+  const gcrs = attribute("satPosition", "vec3").add(
+    attribute("satVelocity", "vec3").mul(dt)
+  );
   // GCRS has Z as the polar axis; the scene uses Y. Proper rotation (no mirroring), then km are
   // scaled so the Earth's radius is 1 like the globe mesh.
   const local = vec3(gcrs.x, gcrs.z, gcrs.y.negate()).div(EARTH_RADIUS_KM);
@@ -81,7 +95,9 @@ export function createSatellites() {
   // Offset in clip space, scaled by w so the square keeps a constant on-screen size: in pixels of
   // the drawing buffer, or (in XR) as an angle through the projection's focal lengths, which keeps
   // it square in each eye whatever the size and shape of the buffer that eye is drawn into.
-  const pixelOffset = positionGeometry.xy.mul(sizeScale.mul(SATELLITE_SIZE_PX)).div(viewport);
+  const pixelOffset = positionGeometry.xy
+    .mul(sizeScale.mul(SATELLITE_SIZE_PX))
+    .div(viewport);
   const focalLengths = vec2(
     cameraProjectionMatrix.mul(vec4(1, 0, 0, 0)).x,
     cameraProjectionMatrix.mul(vec4(0, 1, 0, 0)).y
@@ -89,7 +105,11 @@ export function createSatellites() {
   const angularOffset = positionGeometry.xy
     .mul(focalLengths)
     .mul(sizeScale.mul(Math.tan(SATELLITE_SIZE_XR_RAD / 2)));
-  const offset = select(angularSizing.greaterThan(0.5), angularOffset, pixelOffset).mul(clip.w);
+  const offset = select(
+    angularSizing.greaterThan(0.5),
+    angularOffset,
+    pixelOffset
+  ).mul(clip.w);
 
   const material = new MeshBasicNodeMaterial({ side: DoubleSide });
   material.vertexNode = vec4(clip.xy.add(offset), clip.z, clip.w);
@@ -114,8 +134,14 @@ export function createSatellites() {
       new Float32Array(instances * FLOATS_PER_SATELLITE),
       FLOATS_PER_SATELLITE
     ).setUsage(DynamicDrawUsage);
-    geometry.setAttribute("satPosition", new InterleavedBufferAttribute(instanceBuffer, 3, 0));
-    geometry.setAttribute("satVelocity", new InterleavedBufferAttribute(instanceBuffer, 3, 3));
+    geometry.setAttribute(
+      "satPosition",
+      new InterleavedBufferAttribute(instanceBuffer, 3, 0)
+    );
+    geometry.setAttribute(
+      "satVelocity",
+      new InterleavedBufferAttribute(instanceBuffer, 3, 3)
+    );
     geometry.instanceCount = 0;
     capacity = instances;
     return geometry;
@@ -130,11 +156,15 @@ export function createSatellites() {
   let selectedId: number | null = null;
 
   function resolveSelectedIndex() {
-    selectedIndex.value = selectedId === null ? -1 : (indexById.get(selectedId) ?? -1);
+    selectedIndex.value =
+      selectedId === null ? -1 : (indexById.get(selectedId) ?? -1);
   }
 
   /** Uploads a snapshot. If `visibleIds` is given, only those satellites are drawn and pickable. */
-  function setPositions(snapshot: PositionsSnapshot, visibleIds: Set<number> | null) {
+  function setPositions(
+    snapshot: PositionsSnapshot,
+    visibleIds: Set<number> | null
+  ) {
     snapshotTimeMs = snapshot.t;
     const n = snapshot.ids.length;
 
@@ -158,7 +188,10 @@ export function createSatellites() {
         const id = snapshot.ids[i];
         if (!visibleIds.has(id)) continue;
         const from = i * FLOATS_PER_SATELLITE;
-        data.set(snapshot.state.subarray(from, from + FLOATS_PER_SATELLITE), filteredIds.length * FLOATS_PER_SATELLITE);
+        data.set(
+          snapshot.state.subarray(from, from + FLOATS_PER_SATELLITE),
+          filteredIds.length * FLOATS_PER_SATELLITE
+        );
         indexById.set(id, filteredIds.length);
         filteredIds.push(id);
       }
@@ -185,7 +218,11 @@ export function createSatellites() {
   }
 
   /** Per-frame uniforms: the simulated time and the drawing buffer size in pixels. */
-  function update(simTimeMs: number, viewportWidth: number, viewportHeight: number) {
+  function update(
+    simTimeMs: number,
+    viewportWidth: number,
+    viewportHeight: number
+  ) {
     dt.value = (simTimeMs - snapshotTimeMs) / 1000;
     viewport.value.set(viewportWidth, viewportHeight);
   }
@@ -270,7 +307,8 @@ export function createSatellites() {
       const dz = scratch[2] - origin.z;
       const length = Math.hypot(dx, dy, dz);
       if (length === 0) continue;
-      const cos = (dx * direction.x + dy * direction.y + dz * direction.z) / length;
+      const cos =
+        (dx * direction.x + dy * direction.y + dz * direction.z) / length;
       if (cos <= bestCos) continue;
       if (segmentHitsGlobe(origin.x, origin.y, origin.z, dx, dy, dz)) continue;
 
@@ -285,5 +323,15 @@ export function createSatellites() {
     material.dispose();
   }
 
-  return { mesh, setPositions, setSelected, setAngularSizing, update, scenePosition, pick, pickRay, dispose };
+  return {
+    mesh,
+    setPositions,
+    setSelected,
+    setAngularSizing,
+    update,
+    scenePosition,
+    pick,
+    pickRay,
+    dispose,
+  };
 }

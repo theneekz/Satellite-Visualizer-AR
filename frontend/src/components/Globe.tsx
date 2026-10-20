@@ -479,15 +479,18 @@ function Globe({
             pitch += wrapAngle(targetPitch - pitch) * k;
             // Zoom out (never in) after a selection, eased in log space so large changes feel even.
             if (framing) {
-              const minDistance = Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
+              const minDistance =
+                Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
               // Inverts the camera distance formula below.
               const frameZoom = Math.max(
                 ZOOM_MIN_PERCENT,
-                (BASE_DISTANCE * 100) / (minDistance * Math.min(1, canvas!.width / canvas!.height))
+                (BASE_DISTANCE * 100) /
+                  (minDistance * Math.min(1, canvas!.width / canvas!.height))
               );
               const targetZoom = Math.min(zoomPercent, frameZoom);
               zoomPercent *= (targetZoom / zoomPercent) ** k;
-              if (Math.abs(Math.log(targetZoom / zoomPercent)) < 0.01) framing = false;
+              if (Math.abs(Math.log(targetZoom / zoomPercent)) < 0.01)
+                framing = false;
             }
           }
         }

@@ -131,7 +131,7 @@
 }
 
 .satellite-card__legend-item::before {
-  content: '';
+  content: "";
   width: 6px;
   height: 6px;
   background: var(--dot);

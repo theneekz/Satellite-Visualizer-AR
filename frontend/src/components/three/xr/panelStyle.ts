@@ -47,7 +47,10 @@ export const GRAB_SLOP = 14;
 export const GRAB_SPACE = GRAB_GAP + GRAB_HEIGHT + GRAB_SLOP;
 
 export const BADGE_COLORS = {
-  plain: { text: "rgba(255, 255, 255, 0.75)", background: "rgba(255, 255, 255, 0.1)" },
+  plain: {
+    text: "rgba(255, 255, 255, 0.75)",
+    background: "rgba(255, 255, 255, 0.1)",
+  },
   type: { text: "#9fe1cb", background: "rgba(29, 158, 117, 0.22)" },
   fresh: { text: "#c0dd97", background: "rgba(99, 153, 34, 0.25)" },
   aging: { text: "#fac775", background: "rgba(186, 117, 23, 0.25)" },
@@ -83,7 +86,8 @@ export function drawText(
     let high = text.length - 1;
     while (low < high) {
       const mid = Math.ceil((low + high) / 2);
-      if (ctx.measureText(`${text.slice(0, mid)}…`).width <= maxWidth) low = mid;
+      if (ctx.measureText(`${text.slice(0, mid)}…`).width <= maxWidth)
+        low = mid;
       else high = mid - 1;
     }
     text = `${text.slice(0, low).trimEnd()}…`;
@@ -116,7 +120,12 @@ export function drawBadge(
 }
 
 /** Draws the close button with its top left at (x, y), like the page's close buttons. */
-export function drawCloseButton(ctx: CanvasRenderingContext2D, x: number, y: number, hovered: boolean) {
+export function drawCloseButton(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  hovered: boolean
+) {
   ctx.beginPath();
   ctx.roundRect(x + 0.5, y + 0.5, CLOSE_SIZE - 1, CLOSE_SIZE - 1, 8);
   if (hovered) {
@@ -134,8 +143,18 @@ export function drawCloseButton(ctx: CanvasRenderingContext2D, x: number, y: num
   ctx.textAlign = "left";
 }
 
-export function isOnCloseButton(x: number, y: number, buttonX: number, buttonY: number) {
-  return x >= buttonX && x <= buttonX + CLOSE_SIZE && y >= buttonY && y <= buttonY + CLOSE_SIZE;
+export function isOnCloseButton(
+  x: number,
+  y: number,
+  buttonX: number,
+  buttonY: number
+) {
+  return (
+    x >= buttonX &&
+    x <= buttonX + CLOSE_SIZE &&
+    y >= buttonY &&
+    y <= buttonY + CLOSE_SIZE
+  );
 }
 
 /**
@@ -162,7 +181,12 @@ export function drawGrabBar(
 }
 
 /** Whether (x, y), below the panel, is on the grab bar's hit area. */
-export function isOnGrabBar(x: number, y: number, panelWidth: number, panelHeight: number) {
+export function isOnGrabBar(
+  x: number,
+  y: number,
+  panelWidth: number,
+  panelHeight: number
+) {
   const left = (panelWidth - GRAB_WIDTH) / 2;
   return (
     x >= left - GRAB_SLOP &&

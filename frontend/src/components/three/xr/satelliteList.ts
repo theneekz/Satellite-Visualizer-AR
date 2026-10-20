@@ -1,6 +1,15 @@
-import type { Quaternion, Raycaster, Vector3, WebGPURenderer } from "three/webgpu";
+import type {
+  Quaternion,
+  Raycaster,
+  Vector3,
+  WebGPURenderer,
+} from "three/webgpu";
 import type { SatelliteInfo } from "../../../api/satellites";
-import { isFiltering, type FilterOptions, type SatelliteFilters } from "../../../filters";
+import {
+  isFiltering,
+  type FilterOptions,
+  type SatelliteFilters,
+} from "../../../filters";
 import { sentenceCase } from "../../../format";
 import { createCanvasLayer } from "./canvasLayer";
 import {
@@ -111,12 +120,18 @@ interface Chip {
 }
 
 function yearAt(x: number) {
-  const t = Math.min(1, Math.max(0, (x - SLIDER_LEFT) / (SLIDER_RIGHT - SLIDER_LEFT)));
+  const t = Math.min(
+    1,
+    Math.max(0, (x - SLIDER_LEFT) / (SLIDER_RIGHT - SLIDER_LEFT))
+  );
   return Math.round(YEAR_MIN + t * (YEAR_MAX - YEAR_MIN));
 }
 
 function sliderX(year: number) {
-  return SLIDER_LEFT + ((year - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * (SLIDER_RIGHT - SLIDER_LEFT);
+  return (
+    SLIDER_LEFT +
+    ((year - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * (SLIDER_RIGHT - SLIDER_LEFT)
+  );
 }
 
 /**
@@ -153,7 +168,8 @@ export function createXRSatelliteList(
   let pressedKey: string | null = null;
   // The years shown while a slider handle is dragged; they apply on release, so a drag doesn't
   // refilter 32k satellites on every frame.
-  let sliderDrag: { handle: "from" | "to"; from: number; to: number } | null = null;
+  let sliderDrag: { handle: "from" | "to"; from: number; to: number } | null =
+    null;
   // The years a released drag applied, shown until the new filters come back. App refilters and
   // re-renders before they do, and in between the old filters would snap the handles back.
   let pendingYears: { from: number; to: number } | null = null;
@@ -230,7 +246,13 @@ export function createXRSatelliteList(
         x = PADDING;
         y += CHIP_HEIGHT + CHIP_GAP;
       }
-      chips.push({ target: { kind: "chip", filter, value }, label, x, y, width });
+      chips.push({
+        target: { kind: "chip", filter, value },
+        label,
+        x,
+        y,
+        width,
+      });
       x += width + CHIP_GAP;
     }
     return y + CHIP_HEIGHT;
@@ -240,9 +262,16 @@ export function createXRSatelliteList(
     chips = [];
     let y = SEARCH_TOP + SEARCH_HEIGHT + FIELD_GAP;
     typeLabelY = y;
-    y = layoutChips("objectType", options.objectTypes, y + LABEL_HEIGHT + LABEL_GAP) + FIELD_GAP;
+    y =
+      layoutChips(
+        "objectType",
+        options.objectTypes,
+        y + LABEL_HEIGHT + LABEL_GAP
+      ) + FIELD_GAP;
     sizeLabelY = y;
-    y = layoutChips("size", options.sizes, y + LABEL_HEIGHT + LABEL_GAP) + FIELD_GAP;
+    y =
+      layoutChips("size", options.sizes, y + LABEL_HEIGHT + LABEL_GAP) +
+      FIELD_GAP;
     yearLabelY = y;
     sliderY = y + LABEL_HEIGHT + LABEL_GAP;
     rowsTop = sliderY + SLIDER_HEIGHT + FIELD_GAP;
@@ -258,13 +287,20 @@ export function createXRSatelliteList(
 
   /** Whether anything is filtered, or about to be, like the page's Clear filters condition. */
   function filtering() {
-    return (filters !== null && isFiltering(filters)) || searchText !== "" || sliderDrag !== null;
+    return (
+      (filters !== null && isFiltering(filters)) ||
+      searchText !== "" ||
+      sliderDrag !== null
+    );
   }
 
   function years() {
     if (sliderDrag) return { from: sliderDrag.from, to: sliderDrag.to };
     if (pendingYears) return pendingYears;
-    return { from: filters?.yearFrom ?? YEAR_MIN, to: filters?.yearTo ?? YEAR_MAX };
+    return {
+      from: filters?.yearFrom ?? YEAR_MIN,
+      to: filters?.yearTo ?? YEAR_MAX,
+    };
   }
 
   function maxScrollTop() {
@@ -285,7 +321,8 @@ export function createXRSatelliteList(
     if (index === -1) return;
     const top = index * ROW_HEIGHT;
     if (top < scrollTop) setScrollTop(top);
-    else if (top + ROW_HEIGHT > scrollTop + rowsHeight) setScrollTop(top + ROW_HEIGHT - rowsHeight);
+    else if (top + ROW_HEIGHT > scrollTop + rowsHeight)
+      setScrollTop(top + ROW_HEIGHT - rowsHeight);
   }
 
   /** A rounded control box, like .satellite-filters__control. */
@@ -320,7 +357,8 @@ export function createXRSatelliteList(
       focused: searchFocused,
     });
     const textX = PADDING + 12;
-    const textY = SEARCH_TOP + (SEARCH_HEIGHT - CONTROL_TEXT_SIZE * LINE_HEIGHT) / 2;
+    const textY =
+      SEARCH_TOP + (SEARCH_HEIGHT - CONTROL_TEXT_SIZE * LINE_HEIGHT) / 2;
     const maxWidth = INNER_WIDTH - 24;
     if (searchText) {
       ctx.fillStyle = COLORS.text;
@@ -332,7 +370,10 @@ export function createXRSatelliteList(
     if (searchFocused) {
       // A steady caret after the text; blinking would redraw the panel twice a second.
       ctx.font = font(CONTROL_TEXT_SIZE);
-      const caretX = textX + Math.min(maxWidth, searchText ? ctx.measureText(searchText).width : 0) + 1;
+      const caretX =
+        textX +
+        Math.min(maxWidth, searchText ? ctx.measureText(searchText).width : 0) +
+        1;
       ctx.fillStyle = COLORS.focus;
       ctx.fillRect(caretX, textY + 2, 1.5, CONTROL_TEXT_SIZE * LINE_HEIGHT - 4);
     }
@@ -345,29 +386,53 @@ export function createXRSatelliteList(
     ctx.font = font(TEXT_SIZE);
     const range = `${from} – ${to}`;
     ctx.fillStyle = COLORS.text;
-    drawText(ctx, range, WIDTH - PADDING - ctx.measureText(range).width, yearLabelY, TEXT_SIZE);
+    drawText(
+      ctx,
+      range,
+      WIDTH - PADDING - ctx.measureText(range).width,
+      yearLabelY,
+      TEXT_SIZE
+    );
 
     const centerY = sliderY + SLIDER_HEIGHT / 2;
     const fromX = sliderX(from);
     const toX = sliderX(to);
     ctx.fillStyle = COLORS.track;
     ctx.beginPath();
-    ctx.roundRect(SLIDER_LEFT, centerY - TRACK_HEIGHT / 2, SLIDER_RIGHT - SLIDER_LEFT, TRACK_HEIGHT, TRACK_HEIGHT / 2);
+    ctx.roundRect(
+      SLIDER_LEFT,
+      centerY - TRACK_HEIGHT / 2,
+      SLIDER_RIGHT - SLIDER_LEFT,
+      TRACK_HEIGHT,
+      TRACK_HEIGHT / 2
+    );
     ctx.fill();
     ctx.fillStyle = COLORS.focus;
     ctx.fillRect(fromX, centerY - TRACK_HEIGHT / 2, toX - fromX, TRACK_HEIGHT);
 
     // The handles grow under a ray, and the dragged one stays grown.
     for (const handle of ["from", "to"] as const) {
-      const active = sliderDrag ? sliderDrag.handle === handle : hoveredKey === "slider";
+      const active = sliderDrag
+        ? sliderDrag.handle === handle
+        : hoveredKey === "slider";
       ctx.fillStyle = COLORS.text;
       ctx.beginPath();
-      ctx.arc(handle === "from" ? fromX : toX, centerY, HANDLE_RADIUS + (active ? 2 : 0), 0, 2 * Math.PI);
+      ctx.arc(
+        handle === "from" ? fromX : toX,
+        centerY,
+        HANDLE_RADIUS + (active ? 2 : 0),
+        0,
+        2 * Math.PI
+      );
       ctx.fill();
     }
   }
 
-  function drawRow(ctx: CanvasRenderingContext2D, satellite: SatelliteInfo, y: number) {
+  function drawRow(
+    ctx: CanvasRenderingContext2D,
+    satellite: SatelliteInfo,
+    y: number
+  ) {
     const selected = satellite.id === selectedId;
     if (selected || hoveredKey === `row:${satellite.id}`) {
       ctx.fillStyle = selected ? COLORS.selected : COLORS.rowHover;
@@ -384,7 +449,15 @@ export function createXRSatelliteList(
     drawText(ctx, id, idX, textY, CONTROL_TEXT_SIZE);
     ctx.fillStyle = COLORS.text;
     const nameX = PADDING + ROW_PADDING_X;
-    drawText(ctx, satellite.name, nameX, textY, CONTROL_TEXT_SIZE, 400, idX - 12 - nameX);
+    drawText(
+      ctx,
+      satellite.name,
+      nameX,
+      textY,
+      CONTROL_TEXT_SIZE,
+      400,
+      idX - 12 - nameX
+    );
   }
 
   function drawRows(ctx: CanvasRenderingContext2D) {
@@ -407,7 +480,10 @@ export function createXRSatelliteList(
     ctx.rect(PADDING, rowsTop, ROWS_RIGHT - PADDING, rowsHeight);
     ctx.clip();
     const first = Math.floor(scrollTop / ROW_HEIGHT);
-    const end = Math.min(satellites.length, Math.ceil((scrollTop + rowsHeight) / ROW_HEIGHT));
+    const end = Math.min(
+      satellites.length,
+      Math.ceil((scrollTop + rowsHeight) / ROW_HEIGHT)
+    );
     for (let i = first; i < end; i++) {
       drawRow(ctx, satellites[i], rowsTop + i * ROW_HEIGHT - scrollTop);
     }
@@ -417,11 +493,20 @@ export function createXRSatelliteList(
     const max = maxScrollTop();
     if (max > 0) {
       const contentHeight = satellites.length * ROW_HEIGHT;
-      const thumbHeight = Math.max(SCROLLBAR_MIN_HEIGHT, (rowsHeight * rowsHeight) / contentHeight);
+      const thumbHeight = Math.max(
+        SCROLLBAR_MIN_HEIGHT,
+        (rowsHeight * rowsHeight) / contentHeight
+      );
       const thumbY = rowsTop + ((rowsHeight - thumbHeight) * scrollTop) / max;
       ctx.fillStyle = COLORS.scrollbar;
       ctx.beginPath();
-      ctx.roundRect(WIDTH - PADDING - SCROLLBAR_WIDTH, thumbY, SCROLLBAR_WIDTH, thumbHeight, SCROLLBAR_WIDTH / 2);
+      ctx.roundRect(
+        WIDTH - PADDING - SCROLLBAR_WIDTH,
+        thumbY,
+        SCROLLBAR_WIDTH,
+        thumbHeight,
+        SCROLLBAR_WIDTH / 2
+      );
       ctx.fill();
     }
   }
@@ -461,16 +546,29 @@ export function createXRSatelliteList(
     // Clear filters sits on the Type line, so showing it never moves the rows.
     if (filtering()) {
       ctx.fillStyle = hoveredKey === "clear" ? COLORS.text : COLORS.focus;
-      drawText(ctx, "Clear filters", WIDTH - PADDING - clearWidth(), typeLabelY, TEXT_SIZE);
+      drawText(
+        ctx,
+        "Clear filters",
+        WIDTH - PADDING - clearWidth(),
+        typeLabelY,
+        TEXT_SIZE
+      );
     }
     for (const chip of chips) {
-      const selected = filters !== null && filters[chip.target.filter] === chip.target.value;
+      const selected =
+        filters !== null && filters[chip.target.filter] === chip.target.value;
       drawControl(ctx, chip.x, chip.y, chip.width, CHIP_HEIGHT, {
         selected,
         hovered: hoveredKey === targetKey(chip.target),
       });
       ctx.fillStyle = selected ? COLORS.text : COLORS.buttonText;
-      drawText(ctx, chip.label, chip.x + CHIP_PADDING_X, chip.y + (CHIP_HEIGHT - LABEL_HEIGHT) / 2, TEXT_SIZE);
+      drawText(
+        ctx,
+        chip.label,
+        chip.x + CHIP_PADDING_X,
+        chip.y + (CHIP_HEIGHT - LABEL_HEIGHT) / 2,
+        TEXT_SIZE
+      );
     }
     drawSlider(ctx);
 
@@ -480,8 +578,17 @@ export function createXRSatelliteList(
   }
 
   /** Updates the rows, the count, and whether they are still loading; cheap when unchanged. */
-  function setSatellites(next: SatelliteInfo[], nextTotalCount: number, nextLoading: boolean) {
-    if (next === satellites && nextTotalCount === totalCount && nextLoading === loading) return;
+  function setSatellites(
+    next: SatelliteInfo[],
+    nextTotalCount: number,
+    nextLoading: boolean
+  ) {
+    if (
+      next === satellites &&
+      nextTotalCount === totalCount &&
+      nextLoading === loading
+    )
+      return;
     const changed = next !== satellites;
     satellites = next;
     totalCount = nextTotalCount;
@@ -504,7 +611,11 @@ export function createXRSatelliteList(
       layout();
     }
     // Follow a query set elsewhere (the page's search, or a reset), unless the user is typing.
-    if (searchTimer === null && !searchFocused && next.query !== searchText.trim()) {
+    if (
+      searchTimer === null &&
+      !searchFocused &&
+      next.query !== searchText.trim()
+    ) {
       searchText = next.query;
       input.value = next.query;
     }
@@ -543,7 +654,10 @@ export function createXRSatelliteList(
     const hit = layer.hitTest(raycaster);
     if (!hit) return null;
     const { x, y, local, distance } = hit;
-    const result = (region: ListHit["region"], target: ListTarget | null): ListHit => ({
+    const result = (
+      region: ListHit["region"],
+      target: ListTarget | null
+    ): ListHit => ({
       region,
       target,
       key: target && targetKey(target),
@@ -551,8 +665,10 @@ export function createXRSatelliteList(
       local,
       distance,
     });
-    if (y > HEIGHT) return isOnGrabBar(x, y, WIDTH, HEIGHT) ? result("grab", null) : null;
-    if (isOnCloseButton(x, y, CLOSE_X, CLOSE_Y)) return result("list", { kind: "close" });
+    if (y > HEIGHT)
+      return isOnGrabBar(x, y, WIDTH, HEIGHT) ? result("grab", null) : null;
+    if (isOnCloseButton(x, y, CLOSE_X, CLOSE_Y))
+      return result("list", { kind: "close" });
     const inside = (left: number, top: number, width: number, height: number) =>
       x >= left && x <= left + width && y >= top && y <= top + height;
     if (inside(PADDING, SEARCH_TOP, INNER_WIDTH, SEARCH_HEIGHT)) {
@@ -561,19 +677,30 @@ export function createXRSatelliteList(
     const clear = clearWidth();
     if (
       filtering() &&
-      inside(WIDTH - PADDING - clear, typeLabelY - LINK_SLOP, clear, LABEL_HEIGHT + 2 * LINK_SLOP)
+      inside(
+        WIDTH - PADDING - clear,
+        typeLabelY - LINK_SLOP,
+        clear,
+        LABEL_HEIGHT + 2 * LINK_SLOP
+      )
     ) {
       return result("list", { kind: "clear" });
     }
     for (const chip of chips) {
-      if (inside(chip.x, chip.y, chip.width, CHIP_HEIGHT)) return result("list", chip.target);
+      if (inside(chip.x, chip.y, chip.width, CHIP_HEIGHT))
+        return result("list", chip.target);
     }
     if (inside(PADDING, sliderY, INNER_WIDTH, SLIDER_HEIGHT)) {
       return result("list", { kind: "slider" });
     }
-    if (!loading && inside(PADDING, rowsTop, ROWS_RIGHT - PADDING, rowsHeight)) {
-      const satellite = satellites[Math.floor((y - rowsTop + scrollTop) / ROW_HEIGHT)];
-      if (satellite) return result("list", { kind: "row", satelliteId: satellite.id });
+    if (
+      !loading &&
+      inside(PADDING, rowsTop, ROWS_RIGHT - PADDING, rowsHeight)
+    ) {
+      const satellite =
+        satellites[Math.floor((y - rowsTop + scrollTop) / ROW_HEIGHT)];
+      if (satellite)
+        return result("list", { kind: "row", satelliteId: satellite.id });
     }
     return result("list", null);
   }
@@ -590,7 +717,8 @@ export function createXRSatelliteList(
   function dragSliderTo(x: number) {
     if (!sliderDrag) return;
     const year = yearAt(x);
-    if (sliderDrag.handle === "from") sliderDrag.from = Math.min(year, sliderDrag.to);
+    if (sliderDrag.handle === "from")
+      sliderDrag.from = Math.min(year, sliderDrag.to);
     else sliderDrag.to = Math.max(year, sliderDrag.from);
     layer.invalidate();
   }
@@ -603,7 +731,13 @@ export function createXRSatelliteList(
       const { from, to } = years();
       const year = yearAt(hit.x);
       const handle =
-        year <= from ? "from" : year >= to ? "to" : year - from < to - year ? "from" : "to";
+        year <= from
+          ? "from"
+          : year >= to
+            ? "to"
+            : year - from < to - year
+              ? "from"
+              : "to";
       sliderDrag = { handle, from, to };
       dragSliderTo(hit.x);
     }
@@ -625,7 +759,8 @@ export function createXRSatelliteList(
       const yearFrom = from === YEAR_MIN ? null : from;
       const yearTo = to === YEAR_MAX ? null : to;
       // App keeps its filters when nothing changed, so only wait for a change it will make.
-      if (yearFrom !== filters?.yearFrom || yearTo !== filters?.yearTo) pendingYears = { from, to };
+      if (yearFrom !== filters?.yearFrom || yearTo !== filters?.yearTo)
+        pendingYears = { from, to };
       callbacks.onFiltersChange({ yearFrom, yearTo });
       layer.invalidate();
       return;
@@ -652,7 +787,9 @@ export function createXRSatelliteList(
       case "chip": {
         // Pressing the chosen chip again goes back to All.
         const current = filters?.[target.filter] ?? "";
-        callbacks.onFiltersChange({ [target.filter]: current === target.value ? "" : target.value });
+        callbacks.onFiltersChange({
+          [target.filter]: current === target.value ? "" : target.value,
+        });
         break;
       }
       case "row":

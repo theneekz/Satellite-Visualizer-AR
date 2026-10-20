@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react'
-import { isFiltering, type FilterOptions, type SatelliteFilters } from '../filters'
-import { sentenceCase } from '../format'
-import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import './SatelliteFilterBar.css'
+import { useEffect, useState } from "react";
+import {
+  isFiltering,
+  type FilterOptions,
+  type SatelliteFilters,
+} from "../filters";
+import { sentenceCase } from "../format";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import "./SatelliteFilterBar.css";
 
-const DEBOUNCE_MS = 250
+const DEBOUNCE_MS = 250;
 
 // Ignore partial input like "19" until it is a full four-digit year.
 function parseYear(value: string) {
-  return /^\d{4}$/.test(value.trim()) ? Number(value) : null
+  return /^\d{4}$/.test(value.trim()) ? Number(value) : null;
 }
 
 /**
@@ -22,31 +26,37 @@ function SatelliteFilterBar({
   onChange,
   onReset,
 }: {
-  filters: SatelliteFilters
-  options: FilterOptions
-  onChange: (patch: Partial<SatelliteFilters>) => void
-  onReset: () => void
+  filters: SatelliteFilters;
+  options: FilterOptions;
+  onChange: (patch: Partial<SatelliteFilters>) => void;
+  onReset: () => void;
 }) {
-  const [queryInput, setQueryInput] = useState(filters.query)
+  const [queryInput, setQueryInput] = useState(filters.query);
   // Start from the applied years, which the XR list may have set while this was unmounted.
-  const [fromInput, setFromInput] = useState(filters.yearFrom?.toString() ?? '')
-  const [toInput, setToInput] = useState(filters.yearTo?.toString() ?? '')
+  const [fromInput, setFromInput] = useState(
+    filters.yearFrom?.toString() ?? ""
+  );
+  const [toInput, setToInput] = useState(filters.yearTo?.toString() ?? "");
 
-  const query = useDebouncedValue(queryInput, DEBOUNCE_MS)
-  const from = useDebouncedValue(fromInput, DEBOUNCE_MS)
-  const to = useDebouncedValue(toInput, DEBOUNCE_MS)
+  const query = useDebouncedValue(queryInput, DEBOUNCE_MS);
+  const from = useDebouncedValue(fromInput, DEBOUNCE_MS);
+  const to = useDebouncedValue(toInput, DEBOUNCE_MS);
 
-  useEffect(() => onChange({ query: query.trim() }), [query, onChange])
-  useEffect(() => onChange({ yearFrom: parseYear(from) }), [from, onChange])
-  useEffect(() => onChange({ yearTo: parseYear(to) }), [to, onChange])
+  useEffect(() => onChange({ query: query.trim() }), [query, onChange]);
+  useEffect(() => onChange({ yearFrom: parseYear(from) }), [from, onChange]);
+  useEffect(() => onChange({ yearTo: parseYear(to) }), [to, onChange]);
 
-  const active = isFiltering(filters) || queryInput !== '' || fromInput !== '' || toInput !== ''
+  const active =
+    isFiltering(filters) ||
+    queryInput !== "" ||
+    fromInput !== "" ||
+    toInput !== "";
 
   function reset() {
-    setQueryInput('')
-    setFromInput('')
-    setToInput('')
-    onReset()
+    setQueryInput("");
+    setFromInput("");
+    setToInput("");
+    onReset();
   }
 
   return (
@@ -116,12 +126,16 @@ function SatelliteFilterBar({
         </label>
       </div>
       {active && (
-        <button type="button" className="satellite-filters__reset" onClick={reset}>
+        <button
+          type="button"
+          className="satellite-filters__reset"
+          onClick={reset}
+        >
           Clear filters
         </button>
       )}
     </div>
-  )
+  );
 }
 
-export default SatelliteFilterBar
+export default SatelliteFilterBar;

@@ -27,9 +27,16 @@ import { eraRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
 import { createSatellites } from "./satellites";
-import { createXRSatelliteCard, type XRSatelliteCard } from "./xr/satelliteCard";
+import {
+  createXRSatelliteCard,
+  type XRSatelliteCard,
+} from "./xr/satelliteCard";
 import type { FilterOptions, SatelliteFilters } from "../../filters";
-import { createXRSatelliteList, type ListHit, type XRSatelliteList } from "./xr/satelliteList";
+import {
+  createXRSatelliteList,
+  type ListHit,
+  type XRSatelliteList,
+} from "./xr/satelliteList";
 import earthTextureUrl from "../../assets/earth.jpg";
 
 // Camera and interaction tuning, matching the WebGPU renderer (components/Globe.tsx).
@@ -363,7 +370,11 @@ function GlobeThree({
       new Vector3(0, 0, 0),
       new Vector3(0, 0, -XR_RAY_LENGTH),
     ]);
-    const rayMaterial = new LineBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+    const rayMaterial = new LineBasicNodeMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.5,
+    });
     const inputSources = new Map<Group, XRInputSource>();
     const inertialInverse = new Matrix4();
     const rayOrigin = new Vector3();
@@ -404,17 +415,24 @@ function GlobeThree({
     // The controller dragging a panel by its grab bar. As with the globe, the grab point is carried
     // at a fixed distance along the ray; the panel turns to face the head and sits so the spot
     // grabbed (in the panel's own space) stays on it.
-    let panelDrag: { controller: Group; object: Group; distance: number; local: Vector3 } | null =
-      null;
+    let panelDrag: {
+      controller: Group;
+      object: Group;
+      distance: number;
+      local: Vector3;
+    } | null = null;
     const raycaster = new Raycaster();
 
     /** What the controller's ray points at on the nearest panel, if anything. */
     function panelHit(controller: Group): PanelHit | null {
       raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-      raycaster.ray.direction.set(0, 0, -1).transformDirection(controller.matrixWorld);
+      raycaster.ray.direction
+        .set(0, 0, -1)
+        .transformDirection(controller.matrixWorld);
       const onCard = card?.hitTest(raycaster) ?? null;
       const onList = list?.hitTest(raycaster) ?? null;
-      if (onList && (!onCard || onList.distance < onCard.distance)) return { panel: "list", ...onList };
+      if (onList && (!onCard || onList.distance < onCard.distance))
+        return { panel: "list", ...onList };
       return onCard && { panel: "card", ...onCard };
     }
 
@@ -453,7 +471,10 @@ function GlobeThree({
       }
       controller.getWorldPosition(rayOrigin);
       // About the distance to the globe's near surface; the drag moves that surface.
-      const distance = Math.max(0.1, rayOrigin.distanceTo(stage.position) - stage.scale.x);
+      const distance = Math.max(
+        0.1,
+        rayOrigin.distanceTo(stage.position) - stage.scale.x
+      );
       const start = pointOnRay(controller, distance, new Vector3());
       xrDrag = {
         controller,
@@ -478,7 +499,11 @@ function GlobeThree({
           list?.pointerUp(hit?.panel === "list" ? hit : null);
           return;
         }
-        if (hit?.panel === "card" && hit.region === "close" && pressed.region === "close") {
+        if (
+          hit?.panel === "card" &&
+          hit.region === "close" &&
+          pressed.region === "close"
+        ) {
           // Closing the card clears the selection, like its close button on the page.
           following = false;
           selectedIdRef.current = null;
@@ -508,7 +533,11 @@ function GlobeThree({
       if (!xrDrag) return;
       pointOnRay(xrDrag.controller, xrDrag.distance, grabPoint);
       if (!xrDrag.moved) {
-        if (grabPoint.distanceTo(xrDrag.start) < XR_CLICK_MAX_ANGLE_RAD * xrDrag.distance) return;
+        if (
+          grabPoint.distanceTo(xrDrag.start) <
+          XR_CLICK_MAX_ANGLE_RAD * xrDrag.distance
+        )
+          return;
         xrDrag.moved = true;
         // Dragging the globe hands control back to the user, as on screen. The drag starts here,
         // so the globe doesn't jump by the distance it took to get past the click threshold.
@@ -518,7 +547,11 @@ function GlobeThree({
       }
       // Sideways is measured across the line from the globe to the head, so it stays sideways
       // wherever the user stands; up is the room's up.
-      dragRight.subVectors(camera.position, stage.position).cross(UP).negate().normalize();
+      dragRight
+        .subVectors(camera.position, stage.position)
+        .cross(UP)
+        .negate()
+        .normalize();
       const radius = stage.scale.x;
       const dx = grabPoint.x - xrDrag.last.x;
       const dy = grabPoint.y - xrDrag.last.y;
@@ -543,7 +576,11 @@ function GlobeThree({
       const dz = camera.position.z - panelGrabPoint.z;
       // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
       // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
-      panelFacing.set(-Math.atan2(dy, Math.hypot(dx, dz)), Math.atan2(dx, dz), 0);
+      panelFacing.set(
+        -Math.atan2(dy, Math.hypot(dx, dz)),
+        Math.atan2(dx, dz),
+        0
+      );
       const { object } = panelDrag;
       object.quaternion.setFromEuler(panelFacing);
       panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
@@ -555,7 +592,10 @@ function GlobeThree({
       // The ray, from world space into inertial space, where the globe is the unit sphere.
       inertialInverse.copy(inertial.matrixWorld).invert();
       controller.getWorldPosition(rayOrigin).applyMatrix4(inertialInverse);
-      rayDirection.set(0, 0, -1).transformDirection(controller.matrixWorld).transformDirection(inertialInverse);
+      rayDirection
+        .set(0, 0, -1)
+        .transformDirection(controller.matrixWorld)
+        .transformDirection(inertialInverse);
       return satellites.pickRay(rayOrigin, rayDirection);
     }
 
@@ -566,8 +606,12 @@ function GlobeThree({
       const ray = new Line(rayGeometry, rayMaterial);
       rays.set(controller, ray);
       controller.add(ray);
-      controller.addEventListener("connected", (e) => inputSources.set(controller, e.data));
-      controller.addEventListener("disconnected", () => inputSources.delete(controller));
+      controller.addEventListener("connected", (e) =>
+        inputSources.set(controller, e.data)
+      );
+      controller.addEventListener("disconnected", () =>
+        inputSources.delete(controller)
+      );
       controller.addEventListener("selectstart", handleXRSelectStart);
       controller.addEventListener("selectend", handleXRSelectEnd);
       scene.add(controller);
@@ -582,7 +626,8 @@ function GlobeThree({
       for (const [controller, source] of inputSources) {
         if (source.handedness !== "left") continue;
         const down = source.gamepad?.buttons[XR_Y_BUTTON]?.pressed ?? false;
-        if (down && !yButtonDown.get(controller) && list) setListOpen(!list.isOpen());
+        if (down && !yButtonDown.get(controller) && list)
+          setListOpen(!list.isOpen());
         yButtonDown.set(controller, down);
       }
     }
@@ -622,7 +667,10 @@ function GlobeThree({
         if (Math.abs(y) > XR_THUMBSTICK_DEADZONE) {
           zoomPercent = Math.min(
             XR_ZOOM_MAX_PERCENT,
-            Math.max(ZOOM_MIN_PERCENT, zoomPercent * Math.exp(-y * XR_ZOOM_SPEED * dt))
+            Math.max(
+              ZOOM_MIN_PERCENT,
+              zoomPercent * Math.exp(-y * XR_ZOOM_SPEED * dt)
+            )
           );
         }
       }
@@ -659,7 +707,8 @@ function GlobeThree({
     const listCallbacks = {
       onSelect: (id: number) => onSelectRef.current(id),
       onClose: () => setListOpen(false),
-      onFiltersChange: (patch: Partial<SatelliteFilters>) => xrListRef.current.onFiltersChange(patch),
+      onFiltersChange: (patch: Partial<SatelliteFilters>) =>
+        xrListRef.current.onFiltersChange(patch),
       onFiltersReset: () => xrListRef.current.onFiltersReset(),
     };
 
@@ -672,7 +721,11 @@ function GlobeThree({
     function updateXRPanels() {
       if (!card || !list) return;
       const listProps = xrListRef.current;
-      list.setSatellites(listProps.satellites, listProps.totalCount, listProps.loading);
+      list.setSatellites(
+        listProps.satellites,
+        listProps.totalCount,
+        listProps.loading
+      );
       list.setFilters(listProps.filters, listProps.filterOptions);
       list.setSelected(selectedIdRef.current);
       // A held press on the list follows the ray, for dragging the year slider.
@@ -698,8 +751,12 @@ function GlobeThree({
       let listGrabHighlighted = panelDrag?.object === list.object;
       for (const controller of controllers) {
         const hit = inputSources.has(controller) ? panelHit(controller) : null;
-        const distance = panelDrag?.controller === controller ? panelDrag.distance : hit?.distance;
-        rays.get(controller)!.scale.z = distance !== undefined ? distance / XR_RAY_LENGTH : 1;
+        const distance =
+          panelDrag?.controller === controller
+            ? panelDrag.distance
+            : hit?.distance;
+        rays.get(controller)!.scale.z =
+          distance !== undefined ? distance / XR_RAY_LENGTH : 1;
         if (hit?.panel === "card") {
           if (hit.region === "close") cardCloseHovered = true;
           if (hit.region === "grab") cardGrabHighlighted = true;
@@ -746,12 +803,18 @@ function GlobeThree({
           return;
         }
         navigator.xr
-          ?.requestSession(mode, { optionalFeatures: ["local-floor", "layers"] })
+          ?.requestSession(mode, {
+            optionalFeatures: ["local-floor", "layers"],
+          })
           .then((session) => renderer.xr.setSession(session))
-          .catch((err: unknown) => console.error(`Failed to start ${mode}:`, err));
+          .catch((err: unknown) =>
+            console.error(`Failed to start ${mode}:`, err)
+          );
       };
       const modes: XRSessionMode[] = ["immersive-vr", "immersive-ar"];
-      Promise.all(modes.map((mode) => navigator.xr?.isSessionSupported(mode) ?? false))
+      Promise.all(
+        modes.map((mode) => navigator.xr?.isSessionSupported(mode) ?? false)
+      )
         .then((supported) => {
           if (!disposed) setXrModes(modes.filter((_, i) => supported[i]));
         })
@@ -811,7 +874,10 @@ function GlobeThree({
           // The stage never rotates, so the head's direction from the globe's center in world
           // space is also its direction in the globe's unrotated frame. The camera holds the
           // headset's pose from the last frame.
-          if (inXR) headDirection.subVectors(camera.position, stage.position).normalize();
+          if (inXR)
+            headDirection
+              .subVectors(camera.position, stage.position)
+              .normalize();
           else headDirection.set(0, 0, 1);
           const [targetYaw, targetPitch] = aimAngles(
             sx,
@@ -827,7 +893,8 @@ function GlobeThree({
           pitch += wrapAngle(targetPitch - pitch) * k;
           // Zoom out (never in) after a selection, eased in log space so large changes feel even.
           if (framing) {
-            const minDistance = Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
+            const minDistance =
+              Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
             // Inverts the camera distance formula below.
             const frameZoom = Math.max(
               ZOOM_MIN_PERCENT,
@@ -835,7 +902,8 @@ function GlobeThree({
             );
             const targetZoom = Math.min(zoomPercent, frameZoom);
             zoomPercent *= (targetZoom / zoomPercent) ** k;
-            if (Math.abs(Math.log(targetZoom / zoomPercent)) < 0.01) framing = false;
+            if (Math.abs(Math.log(targetZoom / zoomPercent)) < 0.01)
+              framing = false;
           }
         }
       }
@@ -909,7 +977,10 @@ function GlobeThree({
             XR_CARD_HEIGHT_M,
             -XR_CARD_DISTANCE_M * Math.cos(XR_CARD_ANGLE_RAD)
           ),
-          new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -XR_CARD_ANGLE_RAD)
+          new Quaternion().setFromAxisAngle(
+            new Vector3(0, 1, 0),
+            -XR_CARD_ANGLE_RAD
+          )
         );
         scene.add(card.object);
         list = createXRSatelliteList(
@@ -919,7 +990,10 @@ function GlobeThree({
             XR_LIST_HEIGHT_M,
             -XR_LIST_DISTANCE_M * Math.cos(XR_LIST_ANGLE_RAD)
           ),
-          new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -XR_LIST_ANGLE_RAD),
+          new Quaternion().setFromAxisAngle(
+            new Vector3(0, 1, 0),
+            -XR_LIST_ANGLE_RAD
+          ),
           listCallbacks
         );
         scene.add(list.object);

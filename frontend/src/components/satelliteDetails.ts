@@ -82,11 +82,14 @@ export function satelliteDetails(
   if (satellite.object_type) {
     badges.push({ text: sentenceCase(satellite.object_type), tone: "type" });
   }
-  if (satellite.rcs) badges.push({ text: sentenceCase(satellite.rcs), tone: "plain" });
-  if (launchYear) badges.push({ text: `Launched ${launchYear}`, tone: "plain" });
+  if (satellite.rcs)
+    badges.push({ text: sentenceCase(satellite.rcs), tone: "plain" });
+  if (launchYear)
+    badges.push({ text: `Launched ${launchYear}`, tone: "plain" });
 
   const data: DetailMetric[] = [];
-  if (satellite.originator) data.push({ label: "Source", value: satellite.originator });
+  if (satellite.originator)
+    data.push({ label: "Source", value: satellite.originator });
   data.push({ label: "Revolutions", value: fmt(satellite.rev_at_epoch) });
 
   return {
@@ -103,8 +106,14 @@ export function satelliteDetails(
         id: "live",
         label: "Live position",
         metrics: [
-          { label: "Altitude", value: live ? `${fmt(live.altitudeKm)} km` : "—" },
-          { label: "Speed", value: live ? `${fmt(live.speedKmS, 1)} km/s` : "—" },
+          {
+            label: "Altitude",
+            value: live ? `${fmt(live.altitudeKm)} km` : "—",
+          },
+          {
+            label: "Speed",
+            value: live ? `${fmt(live.speedKmS, 1)} km/s` : "—",
+          },
           {
             label: "Latitude",
             value: live
@@ -124,9 +133,15 @@ export function satelliteDetails(
         label: "Orbit",
         metrics: [
           { label: "Period", value: `${fmt(satellite.period_min, 1)} min` },
-          { label: "Inclination", value: `${fmt(satellite.inclination_deg, 2)}°` },
+          {
+            label: "Inclination",
+            value: `${fmt(satellite.inclination_deg, 2)}°`,
+          },
           { label: "Eccentricity", value: fmt(satellite.eccentricity, 3) },
-          { label: "Mean motion", value: `${fmt(satellite.mean_motion, 2)} rev/day` },
+          {
+            label: "Mean motion",
+            value: `${fmt(satellite.mean_motion, 2)} rev/day`,
+          },
         ],
       },
       { id: "data", label: "Data", metrics: data },
@@ -135,8 +150,14 @@ export function satelliteDetails(
         label: "Orbital elements",
         metrics: [
           { label: "RA of asc. node", value: `${fmt(satellite.raan_deg, 2)}°` },
-          { label: "Arg. of perigee", value: `${fmt(satellite.arg_perigee_deg, 2)}°` },
-          { label: "Mean anomaly", value: `${fmt(satellite.mean_anomaly_deg, 2)}°` },
+          {
+            label: "Arg. of perigee",
+            value: `${fmt(satellite.arg_perigee_deg, 2)}°`,
+          },
+          {
+            label: "Mean anomaly",
+            value: `${fmt(satellite.mean_anomaly_deg, 2)}°`,
+          },
           { label: "BSTAR (drag)", value: satellite.bstar.toExponential(2) },
         ],
       },

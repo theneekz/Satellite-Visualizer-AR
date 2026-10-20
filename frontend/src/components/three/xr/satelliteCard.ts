@@ -1,4 +1,9 @@
-import type { Quaternion, Raycaster, Vector3, WebGPURenderer } from "three/webgpu";
+import type {
+  Quaternion,
+  Raycaster,
+  Vector3,
+  WebGPURenderer,
+} from "three/webgpu";
 import type { PositionsSnapshot, SatelliteInfo } from "../../../api/satellites";
 import type { LiveState } from "../../liveState";
 import {
@@ -79,7 +84,13 @@ export function createXRSatelliteCard(
     draw,
   });
 
-  function drawMetric(ctx: CanvasRenderingContext2D, metric: DetailMetric, x: number, y: number, width: number) {
+  function drawMetric(
+    ctx: CanvasRenderingContext2D,
+    metric: DetailMetric,
+    x: number,
+    y: number,
+    width: number
+  ) {
     ctx.fillStyle = COLORS.muted;
     const keyHeight = drawText(ctx, metric.label, x, y, TEXT_SIZE, 400, width);
     ctx.fillStyle = COLORS.text;
@@ -153,7 +164,9 @@ export function createXRSatelliteCard(
 
     // Lay out the badges first: how they wrap sets the card's height, and the background is
     // drawn before everything else.
-    const badgeRows: { text: string; tone: "type" | "plain"; x: number }[][] = [[]];
+    const badgeRows: { text: string; tone: "type" | "plain"; x: number }[][] = [
+      [],
+    ];
     let rowWidth = 0;
     for (const badge of details.badges) {
       const width = badgeWidth(ctx, badge.text);
@@ -200,13 +213,27 @@ export function createXRSatelliteCard(
       CLOSE_X - 8 - PADDING
     );
     ctx.fillStyle = COLORS.muted;
-    drawText(ctx, details.subtitle, PADDING, PADDING + nameHeight + 2, TEXT_SIZE, 400, CLOSE_X - 8 - PADDING);
+    drawText(
+      ctx,
+      details.subtitle,
+      PADDING,
+      PADDING + nameHeight + 2,
+      TEXT_SIZE,
+      400,
+      CLOSE_X - 8 - PADDING
+    );
 
     drawCloseButton(ctx, CLOSE_X, CLOSE_Y, closeHovered);
 
     badgeRows.forEach((row, i) => {
       for (const badge of row) {
-        drawBadge(ctx, badge.text, badge.x, badgesTop + i * (BADGE_HEIGHT + 6), BADGE_COLORS[badge.tone]);
+        drawBadge(
+          ctx,
+          badge.text,
+          badge.x,
+          badgesTop + i * (BADGE_HEIGHT + 6),
+          BADGE_COLORS[badge.tone]
+        );
       }
     });
 
@@ -250,7 +277,9 @@ export function createXRSatelliteCard(
     if (!hit) return null;
     const { x, y, local, distance } = hit;
     if (y > height) {
-      return isOnGrabBar(x, y, WIDTH, height) ? { region: "grab", local, distance } : null;
+      return isOnGrabBar(x, y, WIDTH, height)
+        ? { region: "grab", local, distance }
+        : null;
     }
     const onClose = isOnCloseButton(x, y, CLOSE_X, CLOSE_Y);
     return { region: onClose ? "close" : "card", local, distance };

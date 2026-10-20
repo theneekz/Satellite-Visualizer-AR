@@ -6,13 +6,20 @@
  */
 export async function installXREmulatorIfNeeded() {
   if (!import.meta.env.DEV) return;
-  if (new URLSearchParams(window.location.search).get("renderer") !== "xr") return;
+  if (new URLSearchParams(window.location.search).get("renderer") !== "xr")
+    return;
 
   // Desktop Chrome has navigator.xr even with no headset, so ask whether it can actually run VR.
-  const native = await navigator.xr?.isSessionSupported("immersive-vr").catch(() => false);
+  const native = await navigator.xr
+    ?.isSessionSupported("immersive-vr")
+    .catch(() => false);
   if (native) return;
 
-  const [{ XRDevice, metaQuest3 }, { DevUI }, { default: WebXRLayersPolyfill }] = await Promise.all([
+  const [
+    { XRDevice, metaQuest3 },
+    { DevUI },
+    { default: WebXRLayersPolyfill },
+  ] = await Promise.all([
     import("iwer"),
     import("@iwer/devui"),
     import("webxr-layers-polyfill"),
