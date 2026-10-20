@@ -7,6 +7,21 @@ import {
   translation,
 } from "./mat4";
 import type { PositionsSnapshot } from "../api/satellites";
+import {
+  CLICK_MAX_MOVE_PX,
+  DRAG_SENSITIVITY,
+  FOLLOW_RATE,
+  FOV_DEG,
+  FRAMING_DISTANCE_FACTOR,
+  ZOOM_MAX_PERCENT,
+  ZOOM_MIN_PERCENT,
+  ZOOM_SENSITIVITY,
+  cameraDistance,
+  canvasSize,
+  clipPlanes,
+  wrapAngle,
+  zoomForDistance,
+} from "./camera";
 import { createSatelliteRenderer } from "./satellite";
 import { earthRotationAngle } from "./earthRotation";
 import { sunDirection } from "./sun";
@@ -98,31 +113,6 @@ function buildSphere(radius: number, latBands: number, lonBands: number) {
   };
 }
 
-// How quickly the camera turns toward a selected satellite (higher is snappier).
-const FOLLOW_RATE = 6;
-// On selection, the camera zooms out (if needed) to at least this many times the satellite's
-// distance from the globe's center. Following puts the satellite between the camera and the
-// globe, so a closer camera would leave a far satellite behind it.
-const FRAMING_DISTANCE_FACTOR = 1.5;
-
-// The far clip plane sits this far (in Earth radii) beyond the globe's center. The farthest
-// catalogued object reaches about 84 (a 526,000 km apogee), so nothing gets clipped.
-const FAR_MARGIN = 100;
-
-/**
- * Clip planes that scale with the camera distance: far always reaches past the farthest object,
- * and near grows with it so depth precision stays fine enough to keep low satellites from
- * flickering against the globe when zoomed far out.
- */
-function clipPlanes(distance: number) {
-  return { near: distance / 100, far: distance + FAR_MARGIN };
-}
-
-/** Wraps an angle difference into [-PI, PI] so the camera turns the short way around. */
-function wrapAngle(angle: number) {
-  return angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
-}
-
 function Globe({
   positionsRef,
   visibleIds,
@@ -160,18 +150,8 @@ function Globe({
     let cancelled = false;
     let frameId = 0;
 
-    // The canvas fills the window, so the globe stays centered in it, but never shrinks below a
-    // usable size (the page scrolls instead).
-    const MIN_CANVAS_PX = 480;
-    function computeSize() {
-      return {
-        width: Math.max(MIN_CANVAS_PX, Math.floor(window.innerWidth)),
-        height: Math.max(MIN_CANVAS_PX, Math.floor(window.innerHeight)),
-      };
-    }
-
     async function init() {
-      const initialSize = computeSize();
+      const initialSize = canvasSize();
       canvas!.width = initialSize.width;
       canvas!.height = initialSize.height;
       canvas!.style.width = `${initialSize.width}px`;
@@ -310,9 +290,6 @@ function Globe({
       let lastY = 0;
       let downX = 0;
       let downY = 0;
-      const DRAG_SENSITIVITY = 0.01;
-      // A press that moves less than this many pixels counts as a click, not a drag.
-      const CLICK_MAX_MOVE_PX = 5;
 
       // Camera state from the most recent frame, used to match clicks to satellites.
       let lastMvp: Float32Array | null = null;
@@ -392,10 +369,6 @@ function Globe({
 
       // Scroll-to-zoom: camera distance from the globe, clamped to a sensible range.
       // zoomPercent 100 = default distance; higher = zoomed in (closer), lower = zoomed out.
-      const BASE_DISTANCE = 3;
-      const ZOOM_MIN_PERCENT = 1;
-      const ZOOM_MAX_PERCENT = 300;
-      const ZOOM_SENSITIVITY = 0.1;
       let zoomPercent = 100;
 
       function handleWheel(e: WheelEvent) {
@@ -413,7 +386,7 @@ function Globe({
       // Recreate the depth texture whenever the window resizes (WebGPU textures don't
       // auto-resize). The projection is rebuilt every frame from the live size and zoom.
       function handleResize() {
-        const size = computeSize();
+        const size = canvasSize();
         if (canvas!.width === size.width && canvas!.height === size.height)
           return;
 
@@ -481,11 +454,9 @@ function Globe({
             if (framing) {
               const minDistance =
                 Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
-              // Inverts the camera distance formula below.
               const frameZoom = Math.max(
                 ZOOM_MIN_PERCENT,
-                (BASE_DISTANCE * 100) /
-                  (minDistance * Math.min(1, canvas!.width / canvas!.height))
+                zoomForDistance(minDistance, canvas!.width / canvas!.height)
               );
               const targetZoom = Math.min(zoomPercent, frameZoom);
               zoomPercent *= (targetZoom / zoomPercent) ** k;
@@ -495,13 +466,15 @@ function Globe({
           }
         }
 
-        // In a portrait window the width is the limiting side, so back the camera off to keep
-        // the whole globe in view.
         const aspect = canvas!.width / canvas!.height;
-        const distance =
-          (BASE_DISTANCE * (100 / zoomPercent)) / Math.min(1, aspect);
+        const distance = cameraDistance(zoomPercent, aspect);
         const { near, far } = clipPlanes(distance);
-        const projection = perspective((45 * Math.PI) / 180, aspect, near, far);
+        const projection = perspective(
+          (FOV_DEG * Math.PI) / 180,
+          aspect,
+          near,
+          far
+        );
         const view = translation(0, 0, -distance);
         const model = multiply(rotationX(pitch), rotationY(yaw));
         // Satellites live in the inertial frame, so they only get the camera rotation (`model`).

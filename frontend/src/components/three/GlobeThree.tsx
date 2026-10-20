@@ -37,28 +37,22 @@ import {
   type ListHit,
   type XRSatelliteList,
 } from "./xr/satelliteList";
+import {
+  CLICK_MAX_MOVE_PX,
+  DRAG_SENSITIVITY,
+  FOLLOW_RATE,
+  FOV_DEG,
+  FRAMING_DISTANCE_FACTOR,
+  ZOOM_MAX_PERCENT,
+  ZOOM_MIN_PERCENT,
+  ZOOM_SENSITIVITY,
+  cameraDistance,
+  canvasSize,
+  clipPlanes,
+  wrapAngle,
+  zoomForDistance,
+} from "../camera";
 import earthTextureUrl from "../../assets/earth.jpg";
-
-// Camera and interaction tuning, matching the WebGPU renderer (components/Globe.tsx).
-const FOV_DEG = 45;
-const BASE_DISTANCE = 3;
-const ZOOM_MIN_PERCENT = 1;
-const ZOOM_MAX_PERCENT = 300;
-const ZOOM_SENSITIVITY = 0.1;
-const DRAG_SENSITIVITY = 0.01;
-// A press that moves less than this many pixels counts as a click, not a drag.
-const CLICK_MAX_MOVE_PX = 5;
-// How quickly the camera turns toward a selected satellite (higher is snappier).
-const FOLLOW_RATE = 6;
-// On selection, the camera zooms out (if needed) to at least this many times the satellite's
-// distance from the globe's center. Following puts the satellite between the camera and the
-// globe, so a closer camera would leave a far satellite behind it.
-const FRAMING_DISTANCE_FACTOR = 1.5;
-// The far clip plane sits this far (in Earth radii) beyond the globe's center. The farthest
-// catalogued object reaches about 84 (a 526,000 km apogee), so nothing gets clipped.
-const FAR_MARGIN = 100;
-// The canvas fills the window but never shrinks below a usable size (the page scrolls instead).
-const MIN_CANVAS_PX = 480;
 
 // XR: the globe floats in front of a standing user at eye height (meters, in the local-floor
 // reference space, where -Z is forward), with the Earth's radius XR_BASE_RADIUS_M at zoom 100%.
@@ -101,11 +95,6 @@ const XR_PANEL_PUSH_SPEED = 1.5;
 const XR_PANEL_MIN_DISTANCE_M = 0.3;
 const XR_PANEL_MAX_DISTANCE_M = 4;
 
-/** Wraps an angle difference into [-PI, PI] so the camera turns the short way around. */
-function wrapAngle(angle: number) {
-  return angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
-}
-
 /**
  * The yaw and pitch that turn the point (sx, sy, sz), in the globe's unrotated frame, toward the
  * unit direction (vx, vy, vz). The rotation is rotationX(pitch) * rotationY(yaw), so the yaw is
@@ -129,13 +118,6 @@ function aimAngles(
     Math.acos(Math.min(1, Math.max(-1, (vx * length) / Math.hypot(sx, sz))));
   const uz = -sx * Math.sin(yaw) + sz * Math.cos(yaw);
   return [yaw, Math.atan2(sy, uz) - Math.atan2(vy, vz)];
-}
-
-function canvasSize() {
-  return {
-    width: Math.max(MIN_CANVAS_PX, Math.floor(window.innerWidth)),
-    height: Math.max(MIN_CANVAS_PX, Math.floor(window.innerHeight)),
-  };
 }
 
 // What a controller's ray points at on a panel, tagged with the panel.
@@ -895,10 +877,9 @@ function GlobeThree({
           if (framing) {
             const minDistance =
               Math.hypot(sx, sy, sz) * FRAMING_DISTANCE_FACTOR;
-            // Inverts the camera distance formula below.
             const frameZoom = Math.max(
               ZOOM_MIN_PERCENT,
-              (BASE_DISTANCE * 100) / (minDistance * Math.min(1, camera.aspect))
+              zoomForDistance(minDistance, camera.aspect)
             );
             const targetZoom = Math.min(zoomPercent, frameZoom);
             zoomPercent *= (targetZoom / zoomPercent) ** k;
@@ -926,14 +907,11 @@ function GlobeThree({
       }
 
       inertial.updateMatrixWorld();
-      // In a portrait window the width is the limiting side, so back off to keep the globe in view.
-      const distance =
-        (BASE_DISTANCE * (100 / zoomPercent)) / Math.min(1, camera.aspect);
+      const distance = cameraDistance(zoomPercent, camera.aspect);
       camera.position.set(0, 0, distance);
-      // Clip planes scale with distance: far always reaches past the farthest object, and near
-      // grows with it so depth precision keeps low satellites from flickering against the globe.
-      camera.near = distance / 100;
-      camera.far = distance + FAR_MARGIN;
+      const { near, far } = clipPlanes(distance);
+      camera.near = near;
+      camera.far = far;
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld();
       mvp

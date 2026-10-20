@@ -1,8 +1,8 @@
 import type { SatellitePosition } from "../api/satellites";
 import { eraRadians } from "./earthRotation";
+import { EARTH_RADIUS_KM } from "../constants";
 
-// WGS84 ellipsoid.
-const EQUATORIAL_RADIUS_KM = 6378.137;
+// WGS84 ellipsoid (EARTH_RADIUS_KM is its equatorial radius).
 const FLATTENING = 1 / 298.257223563;
 const ECCENTRICITY_SQUARED = FLATTENING * (2 - FLATTENING);
 
@@ -38,8 +38,7 @@ export function computeLiveState(
   for (let i = 0; i < 5; i++) {
     const sinLat = Math.sin(lat);
     const n =
-      EQUATORIAL_RADIUS_KM /
-      Math.sqrt(1 - ECCENTRICITY_SQUARED * sinLat * sinLat);
+      EARTH_RADIUS_KM / Math.sqrt(1 - ECCENTRICITY_SQUARED * sinLat * sinLat);
     // Near the poles p/cos(lat) blows up, so switch to the z form there.
     altitude =
       Math.abs(lat) < Math.PI / 4

@@ -20,6 +20,9 @@ import {
   COLORS,
   GRAB_SPACE,
   LINE_HEIGHT,
+  METERS_PER_PIXEL,
+  PADDING,
+  PIXEL_RATIO,
   TEXT_SIZE,
   TITLE_SIZE,
   VALUE_SIZE,
@@ -38,7 +41,6 @@ const WIDTH = 520;
 // The layer's size is fixed when it is created, so it fits the tallest card (badges on two rows)
 // with the grab bar below it. A shorter card leaves the rest transparent.
 const MAX_HEIGHT = 448;
-const PADDING = 20;
 const COLUMN_GAP = 24;
 const COLUMN_WIDTH = (WIDTH - 2 * PADDING - COLUMN_GAP) / 2;
 const METRIC_GAP_X = 12;
@@ -49,11 +51,6 @@ const SECTION_GAP = 12;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
 const LAYER_HEIGHT = MAX_HEIGHT + GRAB_SPACE;
-
-// About 1.5 canvas pixels per display pixel at the card's distance, and 1mm per layout pixel, so
-// the 14.4px body text is about 0.8 degrees tall from a meter away.
-const PIXEL_RATIO = 1.5;
-const METERS_PER_PIXEL = 0.001;
 
 export type CardRegion = "close" | "grab" | "card";
 

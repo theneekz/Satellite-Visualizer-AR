@@ -46,6 +46,14 @@ export const GRAB_SLOP = 14;
 // How much a layer needs below its panel to fit the grab bar and its hit area.
 export const GRAB_SPACE = GRAB_GAP + GRAB_HEIGHT + GRAB_SLOP;
 
+// Space between a panel's edge and its contents.
+export const PADDING = 20;
+
+// About 1.5 canvas pixels per display pixel at a panel's distance, and 1mm per layout pixel, so
+// the 14.4px body text is about 0.8 degrees tall from a meter away.
+export const PIXEL_RATIO = 1.5;
+export const METERS_PER_PIXEL = 0.001;
+
 export const BADGE_COLORS = {
   plain: {
     text: "rgba(255, 255, 255, 0.75)",
