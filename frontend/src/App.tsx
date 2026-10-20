@@ -69,7 +69,7 @@ function App() {
     () => filterSatellites(satellites, filters),
     [satellites, filters]
   );
-  // The set of ids the globe should draw; null when nothing is filtered.
+  // The set of ids the globe should draw when filtered only.
   const visibleIds = useMemo(
     () => (isFiltering(filters) ? new Set(filtered.map((s) => s.id)) : null),
     [filtered, filters]
