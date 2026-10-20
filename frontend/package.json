@@ -29,6 +29,7 @@
     "@webgpu/types": "^0.1.72",
     "iwer": "^2.5.0",
     "oxlint": "^1.81.0",
+    "prettier": "^3.9.10",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "webxr-layers-polyfill": "^1.1.0"
