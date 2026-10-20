@@ -6,10 +6,7 @@ const TEXTURE_PRIME_MERIDIAN_OFFSET = Math.PI;
 
 /**
  * The IAU 2000 Earth Rotation Angle (radians): how far Greenwich has turned from the GCRS X axis
- * at `epochMs` (Unix epoch milliseconds, UTC).
- *
- * Uses UT1 approximated by UTC (under a second of error, well under a degree of rotation).
- * Polar motion and nutation are ignored.
+ * at `epochMs` (Unix epoch milliseconds, UTC). Polar motion and nutation are ignored.
  */
 export function eraRadians(epochMs: number): number {
   const turns = 0.779057273264 + 1.00273781191135448 * daysSinceJ2000(epochMs);
@@ -17,7 +14,7 @@ export function eraRadians(epochMs: number): number {
   return 2 * Math.PI * fraction;
 }
 
-/** Rotation (radians, about the polar axis) to apply to the Earth mesh so it is oriented correctly in GCRS. */
+/** Rotation to apply to the Earth mesh so it is oriented correctly in GCRS. */
 export function earthRotationAngle(epochMs: number): number {
   return eraRadians(epochMs) + TEXTURE_PRIME_MERIDIAN_OFFSET;
 }
