@@ -1,8 +1,9 @@
 # SatViz
 
-Interactive web app for visualizing satellites and NEOs (Near Earth Objects) orbiting Earth in real-time.
+Interactive VR/AR/web app for visualizing satellites and NEOs (Near Earth Objects) orbiting Earth in real-time.
 
-Current functionality: https://www.youtube.com/watch?v=2WOAVaL3KC0
+Demo of all functionality: https://www.youtube.com/watch?v=2WOAVaL3KC0
+
 <img width="480" height="480" alt="satviz" src="https://github.com/user-attachments/assets/8b941c1f-8cd3-4209-9a7f-afa6783933ec" />
 
 ## Features
