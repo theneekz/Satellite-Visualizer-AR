@@ -3,9 +3,6 @@
 venv/
 __pycache__/
 
-# Generated protobuf
-*_pb.ts
-
 # Local config and secrets
 .env
 .env.*
