@@ -210,6 +210,9 @@ def build_position_byte_list(ids, pos, vel):
 # the snapshot's time, so a few seconds of age doesn't show.
 POSITIONS_BUCKET_S = 5
 
+# Skyfield's time conversions, built once from data bundled with the library.
+TIMESCALE = load.timescale()
+
 
 @dataclass(frozen=True)
 class PositionsSnapshot:
@@ -237,7 +240,7 @@ def current_positions(dataset: Dataset) -> PositionsSnapshot:
                 or cached.dataset_version != dataset.version):
             bucket_start = datetime.fromtimestamp(
                 bucket * POSITIONS_BUCKET_S, timezone.utc)
-            t = load.timescale().from_datetime(bucket_start)
+            t = TIMESCALE.from_datetime(bucket_start)
             cached = PositionsSnapshot(
                 dataset_version=dataset.version,
                 bucket=bucket,
