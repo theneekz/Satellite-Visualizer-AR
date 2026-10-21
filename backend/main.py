@@ -4,8 +4,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 import math
 import os
+import threading
+import time
 from datetime import datetime, timezone
-from typing import List, Optional, cast
+from typing import List, Optional
 import numpy as np
 from sgp4.api import Satrec, SatrecArray
 from sgp4 import omm
@@ -203,6 +205,48 @@ def build_position_byte_list(ids, pos, vel):
             + np.hstack([pos, vel]).astype("<f4").tobytes())
 
 
+# Every request within one bucket gets the same positions, computed for the bucket's start, so a
+# CDN can serve them all from one cached response. The client steps each satellite forward from
+# the snapshot's time, so a few seconds of age doesn't show.
+POSITIONS_BUCKET_S = 5
+
+
+@dataclass(frozen=True)
+class PositionsSnapshot:
+    """The /v2/positions body for one time bucket of one dataset version."""
+    dataset_version: str
+    bucket: int
+    # The instant the positions are for, in Unix epoch milliseconds.
+    millis: float
+    body: bytes
+
+
+# The latest snapshot, shared by all requests. The lock makes concurrent requests in a new bucket
+# wait for one computation instead of each running SGP4.
+_positions_lock = threading.Lock()
+_positions: Optional[PositionsSnapshot] = None
+
+
+def current_positions(dataset: Dataset) -> PositionsSnapshot:
+    """The positions for the current time bucket, computed once per bucket and dataset version."""
+    global _positions
+    bucket = int(time.time() // POSITIONS_BUCKET_S)
+    with _positions_lock:
+        cached = _positions
+        if (cached is None or cached.bucket != bucket
+                or cached.dataset_version != dataset.version):
+            bucket_start = datetime.fromtimestamp(
+                bucket * POSITIONS_BUCKET_S, timezone.utc)
+            t = load.timescale().from_datetime(bucket_start)
+            cached = PositionsSnapshot(
+                dataset_version=dataset.version,
+                bucket=bucket,
+                millis=bucket_start.timestamp() * 1000,
+                body=bytes(build_positions(dataset, t)))
+            _positions = cached
+        return cached
+
+
 def etag_matches(request: Request, etag: str) -> bool:
     """Whether the client already names this ETag so it can reuse it."""
     header = request.headers.get("if-none-match")
@@ -238,19 +282,16 @@ def get_positions_v2(request: Request):
     if dataset is None:
         return Response(status_code=503, content="Satellite cache not loaded")
 
-    ts = load.timescale()
-    t = ts.now()
-    time = cast(datetime, t.utc_datetime())
-    millis = time.timestamp() * 1000
-    positions = build_positions(dataset, t)
+    positions = current_positions(dataset)
 
     return Response(
-        content=bytes(positions),
+        content=positions.body,
         media_type="application/octet-stream",
         headers={
-            "X-Timescale": str(millis),
+            "X-Timescale": str(positions.millis),
             "Access-Control-Expose-Headers": "X-Timescale",
-            # Positions are never cached (yet).
-            "Cache-Control": "no-store",
+            # Browsers don't keep the response, since the client polls on its own schedule. Shared
+            # caches like a CDN keep it for one bucket, so nearby users share one response.
+            "Cache-Control": f"public, max-age=0, s-maxage={POSITIONS_BUCKET_S}",
         }
     )
