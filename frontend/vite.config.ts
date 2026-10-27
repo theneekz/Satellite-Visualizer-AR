@@ -6,6 +6,9 @@ import { defineConfig } from "vite";
 export default defineConfig(() => ({
   // WebXR only runs in a secure context
   plugins: [react(), basicSsl()],
+  // satellite.js references its optional WebAssembly builds, which use top-level await; the
+  // default "iife" worker format can't bundle that.
+  worker: { format: "es" as const },
   server: {
     host: true,
     proxy: {

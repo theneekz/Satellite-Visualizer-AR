@@ -1,7 +1,7 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { OMMListSchema, type OMM } from "../protos/omm_pb";
 
-/** One satellite state in the GCRS inertial frame: position in km, velocity in km/s. */
+/** One satellite state in TEME, SGP4's inertial frame: position in km, velocity in km/s. */
 export interface SatellitePosition {
   x: number;
   y: number;
@@ -40,7 +40,7 @@ const BYTES_PER_SATELLITE = 4 + FLOATS_PER_SATELLITE * 4;
 
 /**
  * Response of GET /v2/positions, computed at `t` (Unix epoch milliseconds, UTC). `ids[i]` is the
- * NORAD id whose GCRS state (x, y, z km, vx, vy, vz km/s) is `state[i * 6 .. i * 6 + 6]`.
+ * NORAD id whose TEME state (x, y, z km, vx, vy, vz km/s) is `state[i * 6 .. i * 6 + 6]`.
  */
 export interface PositionsSnapshot {
   t: number;
@@ -49,7 +49,7 @@ export interface PositionsSnapshot {
   indexById: Map<number, number>;
 }
 
-/** The GCRS state of the satellite at `index` in a snapshot. */
+/** The TEME state of the satellite at `index` in a snapshot. */
 export function positionAt(
   snapshot: PositionsSnapshot,
   index: number

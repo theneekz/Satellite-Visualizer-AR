@@ -50,7 +50,7 @@ const QUAD_CORNERS = new Float32Array([
 
 /**
  * Every satellite as one instanced draw of screen-facing squares. Each instance holds its polled
- * GCRS position and velocity; the vertex shader moves it in a straight line by the time since the
+ * TEME position and velocity; the vertex shader moves it in a straight line by the time since the
  * snapshot, exactly like the WebGPU renderer. The mesh belongs in the inertial (camera-rotated)
  * group, not in the spinning Earth.
  */
@@ -64,12 +64,12 @@ export function createSatellites() {
   const angularSizing = uniform(0);
 
   const isSelected = instanceIndex.toFloat().equal(selectedIndex);
-  const gcrs = attribute("satPosition", "vec3").add(
+  const teme = attribute("satPosition", "vec3").add(
     attribute("satVelocity", "vec3").mul(dt)
   );
-  // GCRS has Z as the polar axis; the scene uses Y. Proper rotation (no mirroring), then km are
+  // TEME has Z as the polar axis; the scene uses Y. Proper rotation (no mirroring), then km are
   // scaled so the Earth's radius is 1 like the globe mesh.
-  const local = vec3(gcrs.x, gcrs.z, gcrs.y.negate()).div(EARTH_RADIUS_KM);
+  const local = vec3(teme.x, teme.z, teme.y.negate()).div(EARTH_RADIUS_KM);
   const clip = cameraProjectionMatrix.mul(modelViewMatrix).mul(vec4(local, 1));
   const sizeScale = select(isSelected, float(2), float(1));
   // Offset in clip space, scaled by w so the square keeps a constant on-screen size: in pixels of

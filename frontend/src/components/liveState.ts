@@ -1,5 +1,5 @@
 import type { SatellitePosition } from "../api/satellites";
-import { eraRadians } from "./earthRotation";
+import { gmstRadians } from "./earthRotation";
 import { EARTH_RADIUS_KM } from "../constants";
 
 // WGS84 ellipsoid (EARTH_RADIUS_KM is its equatorial radius).
@@ -14,9 +14,9 @@ export interface LiveState {
 }
 
 /**
- * Where a satellite is at `nowMs`, from its polled GCRS state at `snapshotMs`: a straight-line step
- * (the same one the renderer draws), then GCRS -> Earth-fixed via the Earth Rotation Angle.
- * Uses the same simplified Earth rotation as the globe, so it matches what is drawn.
+ * Where a satellite is at `nowMs`, from its TEME state at `snapshotMs`: a straight-line step (the
+ * same one the renderer draws), then TEME -> Earth-fixed via Greenwich Mean Sidereal Time.
+ * Uses the same Earth rotation as the globe, so it matches what is drawn.
  */
 export function computeLiveState(
   position: SatellitePosition,
@@ -28,9 +28,9 @@ export function computeLiveState(
   const y = position.y + position.vy * dt;
   const z = position.z + position.vz * dt;
 
-  const era = eraRadians(nowMs);
-  const xe = x * Math.cos(era) + y * Math.sin(era);
-  const ye = -x * Math.sin(era) + y * Math.cos(era);
+  const gmst = gmstRadians(nowMs);
+  const xe = x * Math.cos(gmst) + y * Math.sin(gmst);
+  const ye = -x * Math.sin(gmst) + y * Math.cos(gmst);
 
   const p = Math.hypot(xe, ye);
   let lat = Math.atan2(z, p * (1 - ECCENTRICITY_SQUARED));

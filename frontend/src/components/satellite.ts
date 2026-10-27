@@ -38,11 +38,11 @@ const SHADER_SOURCE = /* wgsl */ `
       vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
       vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
     );
-    // Straight-line step from the polled state (GCRS, km) to the current time.
-    let gcrs = position + velocity * uniforms.dt;
-    // GCRS has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
+    // Straight-line step from the polled state (TEME, km) to the current time.
+    let teme = position + velocity * uniforms.dt;
+    // TEME has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
     // then km are scaled so the Earth's radius is 1 like the globe mesh.
-    let world = vec3f(gcrs.x, gcrs.z, -gcrs.y) / ${EARTH_RADIUS_KM};
+    let world = vec3f(teme.x, teme.z, -teme.y) / ${EARTH_RADIUS_KM};
     let clip = uniforms.mvp * vec4f(world, 1.0);
     // The selected satellite is drawn twice as large.
     let isSelected = i32(instanceIndex) == uniforms.selectedIndex;

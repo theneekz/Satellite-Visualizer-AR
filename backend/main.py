@@ -12,7 +12,6 @@ import numpy as np
 from sgp4.api import Satrec, SatrecArray
 from sgp4 import omm
 from skyfield.api import load
-from skyfield.sgp4lib import TEME
 from logger import time_function, log_error, log
 from protos import omm_pb2
 from db.database import read_omm_records
@@ -190,10 +189,9 @@ def build_positions(dataset: Dataset, t):
 
     ok: List[bool] = (errors == 0) & np.isfinite(pos_2d).all(axis=1)
 
-    # This converts TEME -> GCRS. Every satellite shares the same rotation at one instant, so a single matrix multiply converts them all.
-    rotation = TEME.rotation_at(t)
-    pos = pos_2d[ok] @ rotation
-    vel = vel_2d[ok] @ rotation
+    # Positions stay in TEME, SGP4's frame; the frontend rotates the Earth by GMST to match.
+    pos = pos_2d[ok]
+    vel = vel_2d[ok]
     valid_ids = dataset.sat_ids[ok]
 
     return build_position_byte_list(valid_ids, pos, vel)
