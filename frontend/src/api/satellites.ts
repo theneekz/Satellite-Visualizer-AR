@@ -1,7 +1,7 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { OMMListSchema, type OMM } from "../protos/omm_pb";
 
-/** One satellite state in the GCRS inertial frame: position in km, velocity in km/s. */
+/** One satellite state in TEME, SGP4's inertial frame: position in km, velocity in km/s. */
 export interface SatellitePosition {
   x: number;
   y: number;
@@ -35,12 +35,11 @@ export interface SatelliteInfo {
 
 // Floats per satellite in the state block: position (3) + velocity (3).
 export const FLOATS_PER_SATELLITE = 6;
-// Bytes per satellite in a /v2/positions response: a uint32 id + 6 float32s.
-const BYTES_PER_SATELLITE = 4 + FLOATS_PER_SATELLITE * 4;
 
 /**
- * Response of GET /v2/positions, computed at `t` (Unix epoch milliseconds, UTC). `ids[i]` is the
- * NORAD id whose GCRS state (x, y, z km, vx, vy, vz km/s) is `state[i * 6 .. i * 6 + 6]`.
+ * Every satellite's state at `t` (Unix epoch milliseconds, UTC), propagated in the browser by
+ * usePropagatedPositions. `ids[i]` is the NORAD id whose TEME state (x, y, z km, vx, vy, vz km/s)
+ * is `state[i * 6 .. i * 6 + 6]`.
  */
 export interface PositionsSnapshot {
   t: number;
@@ -49,7 +48,7 @@ export interface PositionsSnapshot {
   indexById: Map<number, number>;
 }
 
-/** The GCRS state of the satellite at `index` in a snapshot. */
+/** The TEME state of the satellite at `index` in a snapshot. */
 export function positionAt(
   snapshot: PositionsSnapshot,
   index: number
@@ -67,7 +66,6 @@ export function positionAt(
 }
 
 const SATELLITES_URL = "/v2/satellites";
-const POSITIONS_URL = "/v2/positions";
 
 /** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */
 function toSatelliteInfo(omm: OMM): SatelliteInfo {
@@ -104,23 +102,4 @@ export async function getSatellites(
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   return fromBinary(OMMListSchema, bytes).satellites.map(toSatelliteInfo);
-}
-
-export async function getPositions(
-  signal?: AbortSignal
-): Promise<PositionsSnapshot> {
-  const response = await fetch(POSITIONS_URL, { signal });
-  if (!response.ok) {
-    throw new Error(`GET /v2/positions failed with status ${response.status}`);
-  }
-  const t = Number(response.headers.get("X-Timescale"));
-  const buffer = await response.arrayBuffer();
-  const n = buffer.byteLength / BYTES_PER_SATELLITE;
-  const ids = new Uint32Array(buffer, 0, n);
-  const state = new Float32Array(buffer, n * 4, n * FLOATS_PER_SATELLITE);
-
-  const indexById = new Map<number, number>();
-  for (let i = 0; i < n; i++) indexById.set(ids[i], i);
-
-  return { t, ids, state, indexById };
 }

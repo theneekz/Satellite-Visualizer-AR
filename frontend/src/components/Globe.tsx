@@ -413,7 +413,7 @@ function Globe({
       function frame() {
         if (cancelled) return;
 
-        // Re-upload when a new poll arrives or the filter changes.
+        // Re-upload when a new snapshot arrives or the filter changes.
         const snapshot = positionsRef.current;
         const visible = visibleIdsRef.current;
         if (
@@ -478,7 +478,7 @@ function Globe({
         const view = translation(0, 0, -distance);
         const model = multiply(rotationX(pitch), rotationY(yaw));
         // Satellites live in the inertial frame, so they only get the camera rotation (`model`).
-        // The Earth mesh additionally spins by the Earth Rotation Angle for the current time.
+        // The Earth mesh additionally spins by Greenwich Mean Sidereal Time for the current time.
         const mvp = multiply(multiply(projection, view), model);
         lastMvp = mvp;
         lastModel = model;
@@ -490,7 +490,7 @@ function Globe({
         const earthMvp = multiply(multiply(projection, view), earthModel);
         mvpUniform.set(earthMvp, 0);
         mvpUniform.set(earthModel, 16);
-        // The Sun is inertial like the satellites: same GCRS -> world axis swap as the satellite
+        // The Sun is inertial like the satellites: same TEME -> world axis swap as the satellite
         // shader, then only the camera rotation (not the Earth's spin).
         const [sx, sy, sz] = sunDirection(satellite.simTime());
         const sunWorld = [sx, sz, -sy];

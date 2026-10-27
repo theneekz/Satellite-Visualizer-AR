@@ -33,7 +33,7 @@ export function elementAge(epochMs: number, nowMs: number) {
   return { text, level };
 }
 
-/** Where the satellite is at `nowMs` from the latest polled state, or null if it isn't in it. */
+/** Where the satellite is at `nowMs` from the latest snapshot, or null if it isn't in it. */
 export function liveStateAt(
   snapshot: PositionsSnapshot | null,
   id: number,

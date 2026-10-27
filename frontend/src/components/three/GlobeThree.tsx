@@ -23,7 +23,7 @@ import {
   type Texture,
 } from "three/webgpu";
 import type { PositionsSnapshot, SatelliteInfo } from "../../api/satellites";
-import { eraRadians } from "../earthRotation";
+import { gmstRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
 import { createSatellites } from "./satellites";
@@ -149,9 +149,9 @@ export interface XRListProps {
  * Scene graph, mirroring the WebGPU renderer's frames:
  *   scene
  *   ├─ stage  (identity on screen; places and scales the globe in the room in XR)
- *   │  └─ inertial  (rotated by the camera's yaw/pitch; GCRS with Y as the polar axis)
+ *   │  └─ inertial  (rotated by the camera's yaw/pitch; TEME with Y as the polar axis)
  *   │     ├─ satellites  (positions computed in the vertex shader)
- *   │     └─ earth       (additionally spun about Y by the Earth Rotation Angle)
+ *   │     └─ earth       (additionally spun about Y by Greenwich Mean Sidereal Time)
  *   ├─ card  (XR only; the satellite card's layer plane, or its mesh without layers)
  *   ├─ list  (XR only; the satellite list, likewise)
  *   └─ controllers  (XR only; posed by the headset)
@@ -816,7 +816,7 @@ function GlobeThree({
       lastFrameTime = now;
       simTimeMs += frameDt * 1000;
 
-      // Re-upload when a new poll arrives or the filter changes.
+      // Re-upload when a new snapshot arrives or the filter changes.
       const snapshot = positionsRef.current;
       const visible = visibleIdsRef.current;
       if (
@@ -924,8 +924,8 @@ function GlobeThree({
 
     function updateEarth() {
       if (!earth) return;
-      earth.mesh.rotation.y = eraRadians(simTimeMs);
-      // The Sun is inertial like the satellites: the same GCRS -> scene axis swap, then the
+      earth.mesh.rotation.y = gmstRadians(simTimeMs);
+      // The Sun is inertial like the satellites: the same TEME -> scene axis swap, then the
       // camera rotation (but not the Earth's spin), into world space. The stage never rotates.
       const [x, y, z] = sunDirection(simTimeMs);
       earth.sunDirection.copy(
