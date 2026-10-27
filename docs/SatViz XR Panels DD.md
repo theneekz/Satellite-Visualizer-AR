@@ -106,7 +106,7 @@ Layers receive no input, so a small input router owns it.
 
 ## Backend
 
-N/A. The panels use the existing `/v2/satellites` and `/v2/positions` data.
+N/A. The panels use the existing `/v2/satellites` data and the positions the browser propagates.
 
 ### Database
 
