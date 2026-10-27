@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^2.16.0",
+    "@cloudflare/workers-types": "^5.20261027.1",
     "@iwer/devui": "^2.5.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
