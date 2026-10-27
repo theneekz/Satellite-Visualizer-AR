@@ -49,10 +49,10 @@ const QUAD_CORNERS = new Float32Array([
 ]);
 
 /**
- * Every satellite as one instanced draw of screen-facing squares. Each instance holds its polled
- * TEME position and velocity; the vertex shader moves it in a straight line by the time since the
- * snapshot, exactly like the WebGPU renderer. The mesh belongs in the inertial (camera-rotated)
- * group, not in the spinning Earth.
+ * Every satellite as one instanced draw of screen-facing squares. Each instance holds its
+ * propagated TEME position and velocity; the vertex shader moves it in a straight line by the time
+ * since the snapshot, exactly like the WebGPU renderer. The mesh belongs in the inertial
+ * (camera-rotated) group, not in the spinning Earth.
  */
 export function createSatellites() {
   // Seconds since the snapshot, the drawing buffer size in pixels, and the selected instance

@@ -413,7 +413,7 @@ function Globe({
       function frame() {
         if (cancelled) return;
 
-        // Re-upload when a new poll arrives or the filter changes.
+        // Re-upload when a new snapshot arrives or the filter changes.
         const snapshot = positionsRef.current;
         const visible = visibleIdsRef.current;
         if (
