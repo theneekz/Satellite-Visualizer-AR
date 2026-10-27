@@ -1,29 +1,24 @@
+"""Local development API. Serves /v2/satellites from the PostgreSQL database; Vite proxies /v2 here
+(see frontend/vite.config.ts).
+
+In production, publish.py uploads the same payload to Cloudflare R2, and a Pages Function
+(frontend/functions/v2/satellites.ts) serves it. The browser propagates positions itself.
+"""
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from typing import Optional
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-import math
-import os
-import threading
-import time
-from datetime import datetime, timezone
-from typing import List, Optional
-import numpy as np
-from sgp4.api import Satrec, SatrecArray
-from sgp4 import omm
-from skyfield.api import load
-from logger import time_function, log_error, log
-from protos import omm_pb2
+
 from db.database import read_omm_records
-import json
-import gzip
-import hashlib
+from logger import time_function, log_error
+from satellites_payload import SatellitesPayload, build_satellites_payload
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Build the dataset once before serving, so no request sees (or races to fill) an empty cache.
-    app.state.dataset = load_dataset()
+    # Build the payload once before serving, so no request sees (or races to fill) an empty cache.
+    app.state.payload = load_payload()
     yield
 
 
@@ -36,216 +31,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-EARTH_RADIUS_KM = 6378.137
-EARTH_MU = 398600.4418  # km^3/s^2
-
-
-@dataclass(frozen=True)
-class Dataset:
-    """Everything the endpoints serve, derived from one load of the OMM records.
-
-    Immutable: a reload builds a new Dataset and replaces app.state.dataset in one assignment,
-    so a request always sees one consistent version, never new satrecs with old ids.
-    """
-    # Hash of the satellites payload: identical records give the same version on every server.
-    version: str
-    # Every satellite as one vectorized SGP4 array; sat_ids[i] is the NORAD id of satrecs[i].
-    satrecs: SatrecArray
-    sat_ids: np.ndarray
-    # The /v2/satellites body: a gzipped protobuf OMMList, compressed once so requests don't pay.
-    satellites_gz: bytes
-
-    @property
-    def etag(self) -> str:
-        return f'"{self.version}"'
-
 
 @time_function
-def load_dataset() -> Optional[Dataset]:
-    """Reads the OMM records and builds a Dataset, or None if the database can't be read."""
+def load_payload() -> Optional[SatellitesPayload]:
+    """Reads the OMM records and builds the payload, or None if the database can't be read."""
     try:
         records = read_omm_records()
     except Exception as e:
         log_error('error reading OMM records from the database:', e)
         return None
-    satrecs, sat_ids = build_satrecs(records)
-    satellites = build_omm_protos(records)
-    return Dataset(
-        version=hashlib.sha256(satellites).hexdigest()[:16],
-        satrecs=satrecs,
-        sat_ids=sat_ids,
-        # mtime=0 keeps the bytes deterministic; gzip otherwise embeds the current time.
-        satellites_gz=gzip.compress(satellites, 6, mtime=0),
-    )
-
-
-@time_function
-def build_omm_protos(records: List[dict]) -> bytes:
-    """The serialized protobuf OMMList for every record that can be parsed."""
-    omm_list = omm_pb2.OMMList()
-    for record in records:
-        # Filled in place: no intermediate dict or copy per satellite.
-        if not build_omm_proto(omm_list.satellites.add(), record):
-            # Drop the partly filled message for a record that couldn't be parsed.
-            log("deleted a partly filled message")
-            del omm_list.satellites[-1]
-
-    return omm_list.SerializeToString()
-
-
-def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
-    """Fills `omm` with the static display info for one OMM record. Returns False if the record
-    can't be parsed. Only changes when the cache reloads."""
-    try:
-        mean_motion = record["MEAN_MOTION"]  # rev/day
-        eccentricity = record["ECCENTRICITY"]
-        n = mean_motion * 2 * math.pi / 86400  # rad/s
-        semi_major_axis = (EARTH_MU / n**2) ** (1 / 3)
-        # OMM EPOCH has no timezone; it is UTC.
-        epoch = datetime.fromisoformat(
-            record["EPOCH"]).replace(tzinfo=timezone.utc)
-
-        omm.id = record["NORAD_CAT_ID"]
-        omm.name = record["OBJECT_NAME"]
-        omm.designator = record["OBJECT_ID"]
-        omm.epoch_ms = int(epoch.timestamp() * 1000)
-        omm.period_min = 1440 / mean_motion
-        omm.inclination_deg = record["INCLINATION"]
-        omm.eccentricity = eccentricity
-        omm.perigee_km = semi_major_axis * (1 - eccentricity) - EARTH_RADIUS_KM
-        omm.apogee_km = semi_major_axis * (1 + eccentricity) - EARTH_RADIUS_KM
-        omm.mean_motion = mean_motion
-        omm.raan_deg = record["RA_OF_ASC_NODE"]
-        omm.arg_perigee_deg = record["ARG_OF_PERICENTER"]
-        omm.mean_anomaly_deg = record["MEAN_ANOMALY"]
-        omm.bstar = record["BSTAR"]
-        omm.rev_at_epoch = record["REV_AT_EPOCH"]
-        # Optional: not present in every OMM source. proto3 optional fields are left unset
-        # rather than assigned None.
-        if record.get("OBJECT_TYPE") is not None:
-            omm.object_type = record["OBJECT_TYPE"]
-        if record.get("RCS") is not None:
-            omm.rcs = record["RCS"]
-        if record.get("ORIGINATOR") is not None:
-            omm.originator = record["ORIGINATOR"]
-        return True
-    except Exception as e:
-        log_error('error in build_omm_proto:', e)
-        return False
-
-
-@time_function
-def build_satrecs(records: List[dict]) -> tuple[SatrecArray, np.ndarray]:
-    """One SGP4 Satrec per record, as a vectorized array plus the matching NORAD ids."""
-    temp_satrecs = []
-    temp_sat_ids = []
-
-    for record in records:
-        satrec = Satrec()
-        omm.initialize(satrec, record)
-        temp_satrecs.append(satrec)
-        temp_sat_ids.append(satrec.satnum)
-
-    return SatrecArray(temp_satrecs), np.array(temp_sat_ids)
-
-
-@time_function
-def build_positions(dataset: Dataset, t):
-    # Skyfield's pre-split arrays gives 100% precision with zero math overhead
-    julian_date_array = np.array([t.whole])
-    offset_array = np.array([t.ut1_fraction])
-
-    # One SGP4 call for every satellite at this instant.
-    errors_2d, position, velocity = dataset.satrecs.sgp4(
-        julian_date_array, offset_array)
-
-    # Optimize filtering by dropping the time dimension immediately [:, 0]
-    errors = errors_2d[:, 0]
-    pos_2d = position[:, 0, :]
-    vel_2d = velocity[:, 0, :]
-
-    # Drop satellites SGP4 failed or that produced NaN.
-    #     (errors == 0)
-    #     If a satellite has an error code of 0 (Success), it becomes True. If it has a non-zero code (like 1 for a decayed orbit), it becomes False.
-    #     [True, True, False, ...]
-
-    #     np.isfinite(pos_2d)
-    #     It scans the raw position numbers (X, Y, Z) for mathematical errors like NaN (Not a Number) or Inf (Infinity). SGP4 can spit out NaN if a satellite's orbit breaks or experiences a mathematical division-by-zero error.
-    #     [
-    #       [True, True, True],   # Sat 0: X, Y, Z are all normal numbers
-    #       [True, False, True],  # Sat 1: Y is a NaN!
-    #     ]
-
-    #     .all(axis=1)
-    #     Means look horizontally across the rows. If even a single coordinate in a row is False, the entire row becomes False.
-    #     [True,  # Sat 0 is completely fine
-    #      False] # Sat 1 failed because one of its coordinates was bad
-
-    # Bitwise & here is AND for comparing two sets
-    #       [ True,  True,  False,  True ]  (No SGP4 errors)
-    #     & [ True,  False,  True,  True ]  (All coordinates valid)
-    #       ---------------------------------
-    #       [ True,  False,  False,  True ]  -> final 'ok' mask
-
-    ok: List[bool] = (errors == 0) & np.isfinite(pos_2d).all(axis=1)
-
-    # Positions stay in TEME, SGP4's frame; the frontend rotates the Earth by GMST to match.
-    pos = pos_2d[ok]
-    vel = vel_2d[ok]
-    valid_ids = dataset.sat_ids[ok]
-
-    return build_position_byte_list(valid_ids, pos, vel)
-
-
-def build_position_byte_list(ids, pos, vel):
-    # 28 bytes per satellite, so the client derives n = byteLength / 28.
-    return (ids.astype("<u4").tobytes()
-            + np.hstack([pos, vel]).astype("<f4").tobytes())
-
-
-# Every request within one bucket gets the same positions, computed for the bucket's start, so a
-# CDN can serve them all from one cached response. The client steps each satellite forward from
-# the snapshot's time, so a few seconds of age doesn't show.
-POSITIONS_BUCKET_S = 5
-
-# Skyfield's time conversions, built once from data bundled with the library.
-TIMESCALE = load.timescale()
-
-
-@dataclass(frozen=True)
-class PositionsSnapshot:
-    """The /v2/positions body for one time bucket of one dataset version."""
-    dataset_version: str
-    bucket: int
-    # The instant the positions are for, in Unix epoch milliseconds.
-    millis: float
-    body: bytes
-
-
-# The latest snapshot, shared by all requests. The lock makes concurrent requests in a new bucket
-# wait for one computation instead of each running SGP4.
-_positions_lock = threading.Lock()
-_positions: Optional[PositionsSnapshot] = None
-
-
-def current_positions(dataset: Dataset) -> PositionsSnapshot:
-    """The positions for the current time bucket, computed once per bucket and dataset version."""
-    global _positions
-    bucket = int(time.time() // POSITIONS_BUCKET_S)
-    with _positions_lock:
-        cached = _positions
-        if (cached is None or cached.bucket != bucket
-                or cached.dataset_version != dataset.version):
-            bucket_start = datetime.fromtimestamp(
-                bucket * POSITIONS_BUCKET_S, timezone.utc)
-            t = TIMESCALE.from_datetime(bucket_start)
-            cached = PositionsSnapshot(
-                dataset_version=dataset.version,
-                bucket=bucket,
-                millis=bucket_start.timestamp() * 1000,
-                body=bytes(build_positions(dataset, t)))
-            _positions = cached
-        return cached
+    return build_satellites_payload(records)
 
 
 def etag_matches(request: Request, etag: str) -> bool:
@@ -261,38 +56,16 @@ def etag_matches(request: Request, etag: str) -> bool:
 @app.get("/v2/satellites")
 @time_function
 def get_satellites_v2(request: Request):
-    dataset: Optional[Dataset] = request.app.state.dataset
-    if dataset is None:
+    payload: Optional[SatellitesPayload] = request.app.state.payload
+    if payload is None:
         return Response(status_code=503, content="Satellite cache not loaded")
 
     # no-cache: browsers and CDNs may store the payload but must revalidate each time. While the
-    # dataset is unchanged that costs a 304 with no body instead of the full payload.
-    headers = {"ETag": dataset.etag, "Cache-Control": "public, no-cache"}
-    if etag_matches(request, dataset.etag):
+    # payload is unchanged that costs a 304 with no body instead of the full payload.
+    headers = {"ETag": payload.etag, "Cache-Control": "public, no-cache"}
+    if etag_matches(request, payload.etag):
         return Response(status_code=304, headers=headers)
     return Response(
-        content=dataset.satellites_gz,
+        content=payload.body_gz,
         media_type="application/x-protobuf",
         headers={**headers, "Content-Encoding": "gzip"})
-
-
-@app.get("/v2/positions")
-@time_function
-def get_positions_v2(request: Request):
-    dataset: Optional[Dataset] = request.app.state.dataset
-    if dataset is None:
-        return Response(status_code=503, content="Satellite cache not loaded")
-
-    positions = current_positions(dataset)
-
-    return Response(
-        content=positions.body,
-        media_type="application/octet-stream",
-        headers={
-            "X-Timescale": str(positions.millis),
-            "Access-Control-Expose-Headers": "X-Timescale",
-            # Browsers don't keep the response, since the client polls on its own schedule. Shared
-            # caches like a CDN keep it for one bucket, so nearby users share one response.
-            "Cache-Control": f"public, max-age=0, s-maxage={POSITIONS_BUCKET_S}",
-        }
-    )
