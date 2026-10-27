@@ -5,8 +5,8 @@ name: Publish satellites
 
 on:
   schedule:
-    # Every 8 hours. GitHub delays the most scheduled runs at the start of the hour.
-    - cron: "23 */8 * * *"
+    # Every 12 hours. GitHub delays the most scheduled runs at the start of the hour.
+    - cron: "23 */12 * * *"
   workflow_dispatch:
 
 permissions:

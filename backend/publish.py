@@ -15,6 +15,7 @@ import gzip
 import json
 import os
 import urllib.request
+from dotenv import load_dotenv
 from pathlib import Path
 from typing import List, Optional
 
@@ -104,7 +105,8 @@ def upload(client, bucket: str, payload: SatellitesPayload) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Publish the /v2/satellites payload to R2.")
+    parser = argparse.ArgumentParser(
+        description="Publish the /v2/satellites payload to R2.")
     parser.add_argument(
         "--input", help="OMM JSON file to publish instead of downloading from Spacebook")
     parser.add_argument(
@@ -113,7 +115,8 @@ def main() -> None:
 
     records = read_records(args.input) if args.input else download_records()
     if not isinstance(records, list):
-        raise ValueError(f"expected a JSON array of OMM records, got {type(records).__name__}")
+        raise ValueError(
+            f"expected a JSON array of OMM records, got {type(records).__name__}")
     payload = build_satellites_payload(records)
     if payload.count == 0:
         raise ValueError("none of the OMM records could be parsed")
@@ -123,6 +126,8 @@ def main() -> None:
         Path(args.output).write_bytes(payload.body_gz)
         log(f"wrote {len(payload.body_gz) / 1e6:.2f} MB to {args.output}")
     else:
+        if not os.environ.get("GITHUB_ACTIONS"):
+            load_dotenv()
         upload(r2_client(), os.environ["R2_BUCKET"], payload)
 
 

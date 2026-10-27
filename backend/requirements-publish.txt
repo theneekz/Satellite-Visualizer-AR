@@ -1,4 +1,3 @@
-# For publish.py in the scheduled GitHub Actions workflow, which doesn't need the API server's
-# dependencies.
 protobuf
 boto3
+python-dotenv
