@@ -25,21 +25,34 @@ export function usePropagatedPositions(satellites: SatelliteInfo[]) {
       { type: "module" }
     );
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let inFlight = false;
 
     function send(request: PropagatorRequest, transfer: Transferable[] = []) {
       worker.postMessage(request, transfer);
     }
     function requestSnapshot() {
+      if (inFlight) return;
+      clearTimeout(timer);
+      inFlight = true;
       send({ type: "propagate", timeMs: Date.now() });
     }
 
     worker.onmessage = (event: MessageEvent<PropagatorResponse>) => {
+      inFlight = false;
       const { timeMs, ids, state } = event.data;
       const indexById = new Map<number, number>();
       for (let i = 0; i < ids.length; i++) indexById.set(ids[i], i);
       positionsRef.current = { t: timeMs, ids, state, indexById };
-      timer = setTimeout(requestSnapshot, PROPAGATION_INTERVAL_MS);
+      // Browsers delay timers in hidden tabs, so a snapshot can be minutes old when the tab
+      // returns, and the straight-line step flies satellites off their orbits. Pause while
+      // hidden and propagate again as soon as the tab is visible.
+      if (!document.hidden)
+        timer = setTimeout(requestSnapshot, PROPAGATION_INTERVAL_MS);
     };
+    function onVisibilityChange() {
+      if (!document.hidden) requestSnapshot();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
     worker.onerror = (event) => {
       console.error("Failed to propagate satellites:", event.message);
     };
@@ -49,6 +62,7 @@ export function usePropagatedPositions(satellites: SatelliteInfo[]) {
     requestSnapshot();
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       clearTimeout(timer);
       worker.terminate();
     };
