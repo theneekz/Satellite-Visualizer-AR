@@ -6,8 +6,8 @@ import type {
   PropagatorResponse,
 } from "../propagation/propagator.worker";
 
-// The renderers move each satellite in a straight line between snapshots, which drifts a few km
-// from its true orbit over this interval.
+// Between snapshots, the renderers step each satellite along a gravity-curved path, which stays
+// within tens of meters of its true orbit over this interval.
 const PROPAGATION_INTERVAL_MS = 30 * 1000;
 
 /**
@@ -44,7 +44,7 @@ export function usePropagatedPositions(satellites: SatelliteInfo[]) {
       for (let i = 0; i < ids.length; i++) indexById.set(ids[i], i);
       positionsRef.current = { t: timeMs, ids, state, indexById };
       // Browsers delay timers in hidden tabs, so a snapshot can be minutes old when the tab
-      // returns, and the straight-line step flies satellites off their orbits. Pause while
+      // returns, and stepping that far drifts satellites off their orbits. Pause while
       // hidden and propagate again as soon as the tab is visible.
       if (!document.hidden)
         timer = setTimeout(requestSnapshot, PROPAGATION_INTERVAL_MS);
