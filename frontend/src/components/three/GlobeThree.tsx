@@ -27,6 +27,7 @@ import { eraRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
 import { createSatellites } from "./satellites";
+import { TouchPoints } from "../touchPoints";
 import {
   createXRSatelliteCard,
   type XRSatelliteCard,
@@ -259,6 +260,9 @@ function GlobeThree({
     let framing = false;
     let lastSelectedId: number | null = null;
     let dragging = false;
+    // True once a second finger lands during a gesture, so lifting the fingers isn't a tap.
+    let multiTouch = false;
+    const touches = new TouchPoints();
     let lastX = 0;
     let lastY = 0;
     let downX = 0;
@@ -296,13 +300,28 @@ function GlobeThree({
     }
 
     function handlePointerDown(e: PointerEvent) {
+      touches.add(e);
+      canvas.setPointerCapture(e.pointerId);
+      // A second finger starts a pinch, so it stops the drag and cancels any tap.
+      if (touches.size > 1) {
+        multiTouch = true;
+        dragging = false;
+        return;
+      }
       dragging = true;
       lastX = downX = e.clientX;
       lastY = downY = e.clientY;
-      canvas.setPointerCapture(e.pointerId);
     }
 
     function handlePointerMove(e: PointerEvent) {
+      const pinch = touches.move(e);
+      if (pinch !== 1) {
+        framing = false;
+        zoomPercent = Math.min(
+          ZOOM_MAX_PERCENT,
+          Math.max(ZOOM_MIN_PERCENT, zoomPercent * pinch)
+        );
+      }
       if (!dragging) return;
       // Dragging the globe hands control back to the user.
       if (
@@ -316,19 +335,35 @@ function GlobeThree({
       lastY = e.clientY;
     }
 
-    function handlePointerCancel(e: PointerEvent) {
-      dragging = false;
+    // Lifts one finger. If one finger stays down, the drag picks up from its position.
+    function releasePointer(e: PointerEvent) {
+      touches.remove(e);
       canvas.releasePointerCapture(e.pointerId);
+      if (touches.size === 0) {
+        multiTouch = false;
+        dragging = false;
+      } else if (touches.size === 1) {
+        const remaining = touches.only()!;
+        lastX = remaining.x;
+        lastY = remaining.y;
+        dragging = true;
+      }
+    }
+
+    function handlePointerCancel(e: PointerEvent) {
+      releasePointer(e);
     }
 
     function handlePointerUp(e: PointerEvent) {
-      handlePointerCancel(e);
-      if (
-        Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX
-      ) {
-        handleClick(e);
-      }
+      const isTap =
+        !multiTouch &&
+        Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX;
+      releasePointer(e);
+      if (isTap) handleClick(e);
     }
+
+    // Stops the browser from scrolling or zooming the page, so the pointer events reach the globe.
+    canvas.style.touchAction = "none";
 
     function handleWheel(e: WheelEvent) {
       e.preventDefault();
