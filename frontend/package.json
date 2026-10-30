@@ -15,10 +15,12 @@
     "@tanstack/react-virtual": "^3.14.13",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "satellite.js": "^7.1.0",
     "three": "^0.186.1"
   },
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^2.16.0",
+    "@cloudflare/workers-types": "^5.20261027.1",
     "@iwer/devui": "^2.5.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

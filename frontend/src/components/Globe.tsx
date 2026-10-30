@@ -23,6 +23,7 @@ import {
   zoomForDistance,
 } from "./camera";
 import { createSatelliteRenderer } from "./satellite";
+import { TouchPoints } from "./touchPoints";
 import { earthRotationAngle } from "./earthRotation";
 import { sunDirection } from "./sun";
 import earthTextureUrl from "../assets/earth.jpg";
@@ -286,6 +287,9 @@ function Globe({
       let framing = false;
       let lastSelectedId: number | null = null;
       let dragging = false;
+      // True once a second finger lands during a gesture, so lifting the fingers isn't a tap.
+      let multiTouch = false;
+      const touches = new TouchPoints();
       let lastX = 0;
       let lastY = 0;
       let downX = 0;
@@ -324,15 +328,30 @@ function Globe({
       }
 
       function handlePointerDown(e: PointerEvent) {
+        touches.add(e);
+        canvas!.setPointerCapture(e.pointerId);
+        // A second finger starts a pinch, so it stops the drag and cancels any tap.
+        if (touches.size > 1) {
+          multiTouch = true;
+          dragging = false;
+          return;
+        }
         dragging = true;
         lastX = e.clientX;
         lastY = e.clientY;
         downX = e.clientX;
         downY = e.clientY;
-        canvas!.setPointerCapture(e.pointerId);
       }
 
       function handlePointerMove(e: PointerEvent) {
+        const pinch = touches.move(e);
+        if (pinch !== 1) {
+          framing = false;
+          zoomPercent = Math.min(
+            ZOOM_MAX_PERCENT,
+            Math.max(ZOOM_MIN_PERCENT, zoomPercent * pinch)
+          );
+        }
         if (!dragging) return;
         // Dragging the globe hands control back to the user.
         if (
@@ -348,20 +367,35 @@ function Globe({
         pitch += dy * DRAG_SENSITIVITY;
       }
 
-      function handlePointerCancel(e: PointerEvent) {
-        dragging = false;
+      // Lifts one finger. If one finger stays down, the drag picks up from its position.
+      function releasePointer(e: PointerEvent) {
+        touches.remove(e);
         canvas!.releasePointerCapture(e.pointerId);
-      }
-
-      function handlePointerUp(e: PointerEvent) {
-        handlePointerCancel(e);
-        if (
-          Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX
-        ) {
-          handleClick(e);
+        if (touches.size === 0) {
+          multiTouch = false;
+          dragging = false;
+        } else if (touches.size === 1) {
+          const remaining = touches.only()!;
+          lastX = remaining.x;
+          lastY = remaining.y;
+          dragging = true;
         }
       }
 
+      function handlePointerCancel(e: PointerEvent) {
+        releasePointer(e);
+      }
+
+      function handlePointerUp(e: PointerEvent) {
+        const isTap =
+          !multiTouch &&
+          Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX;
+        releasePointer(e);
+        if (isTap) handleClick(e);
+      }
+
+      // Stops the browser from scrolling or zooming the page, so the pointer events reach the globe.
+      canvas!.style.touchAction = "none";
       canvas!.addEventListener("pointerdown", handlePointerDown);
       canvas!.addEventListener("pointermove", handlePointerMove);
       canvas!.addEventListener("pointerup", handlePointerUp);
@@ -413,7 +447,7 @@ function Globe({
       function frame() {
         if (cancelled) return;
 
-        // Re-upload when a new poll arrives or the filter changes.
+        // Re-upload when a new snapshot arrives or the filter changes.
         const snapshot = positionsRef.current;
         const visible = visibleIdsRef.current;
         if (
@@ -478,7 +512,7 @@ function Globe({
         const view = translation(0, 0, -distance);
         const model = multiply(rotationX(pitch), rotationY(yaw));
         // Satellites live in the inertial frame, so they only get the camera rotation (`model`).
-        // The Earth mesh additionally spins by the Earth Rotation Angle for the current time.
+        // The Earth mesh additionally spins by Greenwich Mean Sidereal Time for the current time.
         const mvp = multiply(multiply(projection, view), model);
         lastMvp = mvp;
         lastModel = model;
@@ -490,7 +524,7 @@ function Globe({
         const earthMvp = multiply(multiply(projection, view), earthModel);
         mvpUniform.set(earthMvp, 0);
         mvpUniform.set(earthModel, 16);
-        // The Sun is inertial like the satellites: same GCRS -> world axis swap as the satellite
+        // The Sun is inertial like the satellites: same TEME -> world axis swap as the satellite
         // shader, then only the camera rotation (not the Earth's spin).
         const [sx, sy, sz] = sunDirection(satellite.simTime());
         const sunWorld = [sx, sz, -sy];

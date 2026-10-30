@@ -38,11 +38,11 @@ const SHADER_SOURCE = /* wgsl */ `
       vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
       vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
     );
-    // Straight-line step from the polled state (GCRS, km) to the current time.
-    let gcrs = position + velocity * uniforms.dt;
-    // GCRS has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
+    // Straight-line step from the snapshot's state (TEME, km) to the current time.
+    let teme = position + velocity * uniforms.dt;
+    // TEME has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
     // then km are scaled so the Earth's radius is 1 like the globe mesh.
-    let world = vec3f(gcrs.x, gcrs.z, -gcrs.y) / ${EARTH_RADIUS_KM};
+    let world = vec3f(teme.x, teme.z, -teme.y) / ${EARTH_RADIUS_KM};
     let clip = uniforms.mvp * vec4f(world, 1.0);
     // The selected satellite is drawn twice as large.
     let isSelected = i32(instanceIndex) == uniforms.selectedIndex;
@@ -66,9 +66,9 @@ const SHADER_SOURCE = /* wgsl */ `
 
 /**
  * Draws every satellite in the latest snapshot as a small square in the same render pass as the
- * globe. Each satellite is one instance holding its polled position and velocity; the vertex
+ * globe. Each satellite is one instance holding its propagated position and velocity; the vertex
  * shader moves it in a straight line by the time elapsed since the snapshot. That is accurate to
- * a few km over the ~30 s between polls, and each new poll re-anchors it.
+ * a few km over the ~30 s between snapshots, and each new snapshot re-anchors it.
  */
 export function createSatelliteRenderer(
   device: GPUDevice,

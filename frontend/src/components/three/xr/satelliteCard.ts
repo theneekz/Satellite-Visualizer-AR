@@ -320,7 +320,7 @@ export function createXRSatelliteCard(
     syncLayer();
   }
 
-  /** Recomputes the live position from the latest poll, as the page's card does each second. */
+  /** Recomputes the live position from the latest snapshot, as the page's card does each second. */
   function refresh(snapshot: PositionsSnapshot | null, now: number) {
     if (!satellite) return;
     nowMs = now;

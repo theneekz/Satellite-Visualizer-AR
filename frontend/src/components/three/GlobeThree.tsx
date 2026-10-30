@@ -23,10 +23,11 @@ import {
   type Texture,
 } from "three/webgpu";
 import type { PositionsSnapshot, SatelliteInfo } from "../../api/satellites";
-import { eraRadians } from "../earthRotation";
+import { gmstRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
 import { createSatellites } from "./satellites";
+import { TouchPoints } from "../touchPoints";
 import {
   createXRSatelliteCard,
   type XRSatelliteCard,
@@ -149,9 +150,9 @@ export interface XRListProps {
  * Scene graph, mirroring the WebGPU renderer's frames:
  *   scene
  *   ├─ stage  (identity on screen; places and scales the globe in the room in XR)
- *   │  └─ inertial  (rotated by the camera's yaw/pitch; GCRS with Y as the polar axis)
+ *   │  └─ inertial  (rotated by the camera's yaw/pitch; TEME with Y as the polar axis)
  *   │     ├─ satellites  (positions computed in the vertex shader)
- *   │     └─ earth       (additionally spun about Y by the Earth Rotation Angle)
+ *   │     └─ earth       (additionally spun about Y by Greenwich Mean Sidereal Time)
  *   ├─ card  (XR only; the satellite card's layer plane, or its mesh without layers)
  *   ├─ list  (XR only; the satellite list, likewise)
  *   └─ controllers  (XR only; posed by the headset)
@@ -259,6 +260,9 @@ function GlobeThree({
     let framing = false;
     let lastSelectedId: number | null = null;
     let dragging = false;
+    // True once a second finger lands during a gesture, so lifting the fingers isn't a tap.
+    let multiTouch = false;
+    const touches = new TouchPoints();
     let lastX = 0;
     let lastY = 0;
     let downX = 0;
@@ -296,13 +300,28 @@ function GlobeThree({
     }
 
     function handlePointerDown(e: PointerEvent) {
+      touches.add(e);
+      canvas.setPointerCapture(e.pointerId);
+      // A second finger starts a pinch, so it stops the drag and cancels any tap.
+      if (touches.size > 1) {
+        multiTouch = true;
+        dragging = false;
+        return;
+      }
       dragging = true;
       lastX = downX = e.clientX;
       lastY = downY = e.clientY;
-      canvas.setPointerCapture(e.pointerId);
     }
 
     function handlePointerMove(e: PointerEvent) {
+      const pinch = touches.move(e);
+      if (pinch !== 1) {
+        framing = false;
+        zoomPercent = Math.min(
+          ZOOM_MAX_PERCENT,
+          Math.max(ZOOM_MIN_PERCENT, zoomPercent * pinch)
+        );
+      }
       if (!dragging) return;
       // Dragging the globe hands control back to the user.
       if (
@@ -316,19 +335,35 @@ function GlobeThree({
       lastY = e.clientY;
     }
 
-    function handlePointerCancel(e: PointerEvent) {
-      dragging = false;
+    // Lifts one finger. If one finger stays down, the drag picks up from its position.
+    function releasePointer(e: PointerEvent) {
+      touches.remove(e);
       canvas.releasePointerCapture(e.pointerId);
+      if (touches.size === 0) {
+        multiTouch = false;
+        dragging = false;
+      } else if (touches.size === 1) {
+        const remaining = touches.only()!;
+        lastX = remaining.x;
+        lastY = remaining.y;
+        dragging = true;
+      }
+    }
+
+    function handlePointerCancel(e: PointerEvent) {
+      releasePointer(e);
     }
 
     function handlePointerUp(e: PointerEvent) {
-      handlePointerCancel(e);
-      if (
-        Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX
-      ) {
-        handleClick(e);
-      }
+      const isTap =
+        !multiTouch &&
+        Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX;
+      releasePointer(e);
+      if (isTap) handleClick(e);
     }
+
+    // Stops the browser from scrolling or zooming the page, so the pointer events reach the globe.
+    canvas.style.touchAction = "none";
 
     function handleWheel(e: WheelEvent) {
       e.preventDefault();
@@ -552,21 +587,27 @@ function GlobeThree({
     function handlePanelDrag() {
       if (!panelDrag) return;
       pointOnRay(panelDrag.controller, panelDrag.distance, panelGrabPoint);
-      // The camera holds the headset's pose from the last frame.
-      const dx = camera.position.x - panelGrabPoint.x;
-      const dy = camera.position.y - panelGrabPoint.y;
-      const dz = camera.position.z - panelGrabPoint.z;
-      // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
-      // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
-      panelFacing.set(
-        -Math.atan2(dy, Math.hypot(dx, dz)),
-        Math.atan2(dx, dz),
-        0
-      );
       const { object } = panelDrag;
-      object.quaternion.setFromEuler(panelFacing);
-      panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
-      object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      // The panel aims from its center, not the grab point. The grab bar sits below the center, so
+      // aiming from the grab point tilts the panel off the head, most for the tall list. The
+      // center depends on the facing too, so two passes settle both; the offset is small next to
+      // the distance, so the second pass is nearly exact.
+      for (let pass = 0; pass < 2; pass++) {
+        // The camera holds the headset's pose from the last frame.
+        const dx = camera.position.x - object.position.x;
+        const dy = camera.position.y - object.position.y;
+        const dz = camera.position.z - object.position.z;
+        // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
+        // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
+        panelFacing.set(
+          -Math.atan2(dy, Math.hypot(dx, dz)),
+          Math.atan2(dx, dz),
+          0
+        );
+        object.quaternion.setFromEuler(panelFacing);
+        panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
+        object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      }
     }
 
     /** The satellite the controller's ray points at, or null. */
@@ -816,7 +857,7 @@ function GlobeThree({
       lastFrameTime = now;
       simTimeMs += frameDt * 1000;
 
-      // Re-upload when a new poll arrives or the filter changes.
+      // Re-upload when a new snapshot arrives or the filter changes.
       const snapshot = positionsRef.current;
       const visible = visibleIdsRef.current;
       if (
@@ -924,8 +965,8 @@ function GlobeThree({
 
     function updateEarth() {
       if (!earth) return;
-      earth.mesh.rotation.y = eraRadians(simTimeMs);
-      // The Sun is inertial like the satellites: the same GCRS -> scene axis swap, then the
+      earth.mesh.rotation.y = gmstRadians(simTimeMs);
+      // The Sun is inertial like the satellites: the same TEME -> scene axis swap, then the
       // camera rotation (but not the Earth's spin), into world space. The stage never rotates.
       const [x, y, z] = sunDirection(simTimeMs);
       earth.sunDirection.copy(

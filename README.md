@@ -9,20 +9,21 @@ Demo of all functionality: https://www.youtube.com/watch?v=2WOAVaL3KC0
 ## Features
 
 - 3D globe with live satellite positions
-- Real-time orbital animation (2-3 second updates via polling)
+- Real-time orbital animation (SGP4 propagation in the browser)
 - Satellite search and filtering (by type, country, constellation)
 - Click to view satellite details (name, altitude, velocity, orbital period)
 
 ## Tech Stack
 
-| Layer        | Technology                                     |
-| ------------ | ---------------------------------------------- |
-| Frontend 3D  | WebGPU, Three.js (for performance comparison!) |
-| Frontend UI  | React                                          |
-| Backend      | Python + FastAPI                               |
-| Orbital Math | skyfield + sgp4                                |
-| Data Source  | Spacebook                                      |
-| Database     | PostgreSQL                                     |
+| Layer        | Technology                                        |
+| ------------ | ------------------------------------------------- |
+| Frontend 3D  | WebGPU, Three.js (for performance comparison!)    |
+| Frontend UI  | React                                             |
+| Orbital Math | satellite.js (SGP4, in a Web Worker)              |
+| Backend      | Python publish job; FastAPI for local development |
+| Hosting      | Cloudflare Pages and R2; GitHub Actions           |
+| Data Source  | Spacebook                                         |
+| Database     | PostgreSQL (local development)                    |
 
 ## Project Structure
 
