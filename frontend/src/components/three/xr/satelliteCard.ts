@@ -1,9 +1,8 @@
-import {
-  Group,
+import type {
   Quaternion,
+  Raycaster,
   Vector3,
-  type Raycaster,
-  type WebGPURenderer,
+  WebGPURenderer,
 } from "three/webgpu";
 import type { PositionsSnapshot, SatelliteInfo } from "../../../api/satellites";
 import type { LiveState } from "../../liveState";
@@ -13,7 +12,7 @@ import {
   type DetailMetric,
   type DetailSection,
 } from "../../satelliteDetails";
-import { createCanvasLayer, type CanvasLayer } from "./canvasLayer";
+import { createCanvasLayer } from "./canvasLayer";
 import {
   BADGE_COLORS,
   BADGE_HEIGHT,
@@ -39,9 +38,8 @@ import {
 // Layout, in layout pixels. The page's card is one 300px column; in the room the four sections
 // sit in a 2x2 grid instead, so the card stays within a comfortable field of view.
 const WIDTH = 520;
-// The tallest card (badges on two rows). Each card height gets its own layer, sized to the card
-// plus the grab bar, because a layer's size is fixed when it is created and extra transparent
-// space below a card would let the room show through.
+// The layer's size is fixed when it is created, so it fits the tallest card (badges on two rows)
+// with the grab bar below it. A shorter card leaves the rest transparent.
 const MAX_HEIGHT = 448;
 const COLUMN_GAP = 24;
 const COLUMN_WIDTH = (WIDTH - 2 * PADDING - COLUMN_GAP) / 2;
@@ -52,9 +50,7 @@ const METRIC_HEIGHT = (TEXT_SIZE + VALUE_SIZE) * LINE_HEIGHT;
 const SECTION_GAP = 12;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
-
-// Measures text before a card is drawn, since its height decides which layer it draws on.
-const measureCtx = document.createElement("canvas").getContext("2d")!;
+const LAYER_HEIGHT = MAX_HEIGHT + GRAB_SPACE;
 
 export type CardRegion = "close" | "grab" | "card";
 
@@ -72,61 +68,18 @@ export function createXRSatelliteCard(
   let nowMs = Date.now();
   let closeHovered = false;
   let grabHighlighted = false;
-  // The card's height, which varies with how the badges wrap; set by each layout.
+  // The drawn card's height, which varies with how the badges wrap; set by each draw.
   let height = MAX_HEIGHT;
-  let usesLayers = false;
 
-  // The group the card's layers live in. Its pose is the card's pose, so dragging moves them all.
-  const root = new Group();
-  root.position.copy(position);
-  root.quaternion.copy(quaternion);
-
-  // One layer per card height, created when a card first needs it. A layer's size is fixed, so
-  // this is how each card gets a layer that ends at its grab bar. Layers are never removed, since
-  // three.js cannot remove one; a hidden layer draws nothing.
-  const layers = new Map<number, CanvasLayer>();
-  // The layer showing the current card, or null while no card is shown.
-  let layer: CanvasLayer | null = null;
-
-  function layerFor(cardHeight: number) {
-    const key = Math.ceil(cardHeight);
-    let found = layers.get(key);
-    if (!found) {
-      found = createCanvasLayer(renderer, {
-        width: WIDTH,
-        // The card, then the grab bar's gap, bar, and hit area below it.
-        height: key + GRAB_SPACE,
-        pixelRatio: PIXEL_RATIO,
-        metersPerPixel: METERS_PER_PIXEL,
-        // Positioned by the group, so the layer sits at the origin.
-        position: new Vector3(),
-        quaternion: new Quaternion(),
-        draw,
-      });
-      found.setUsesLayers(usesLayers);
-      root.add(found.object);
-      layers.set(key, found);
-    }
-    return found;
-  }
-
-  /** Shows the layer that fits the current card, and redraws it. */
-  function syncLayer() {
-    if (!satellite) {
-      layer?.setVisible(false);
-      layer = null;
-      return;
-    }
-    const details = satelliteDetails(satellite, live, nowMs);
-    height = cardLayout(measureCtx, details).height;
-    const next = layerFor(height);
-    if (next !== layer) {
-      layer?.setVisible(false);
-      layer = next;
-      layer.setVisible(true);
-    }
-    layer.invalidate();
-  }
+  const layer = createCanvasLayer(renderer, {
+    width: WIDTH,
+    height: LAYER_HEIGHT,
+    pixelRatio: PIXEL_RATIO,
+    metersPerPixel: METERS_PER_PIXEL,
+    position,
+    quaternion,
+    draw,
+  });
 
   function drawMetric(
     ctx: CanvasRenderingContext2D,
@@ -202,14 +155,12 @@ export function createXRSatelliteCard(
     });
   }
 
-  /**
-   * Lays out the card: where the badge rows and the sections sit, and the card's height. The
-   * height depends on how the badges wrap and how tall each section is, so it varies by satellite.
-   */
-  function cardLayout(
-    ctx: CanvasRenderingContext2D,
-    details: ReturnType<typeof satelliteDetails>
-  ) {
+  function draw(ctx: CanvasRenderingContext2D) {
+    if (!satellite) return;
+    const details = satelliteDetails(satellite, live, nowMs);
+
+    // Lay out the badges first: how they wrap sets the card's height, and the background is
+    // drawn before everything else.
     const badgeRows: { text: string; tone: "type" | "plain"; x: number }[][] = [
       [],
     ];
@@ -234,22 +185,10 @@ export function createXRSatelliteCard(
     const [a, b, c, d] = details.sections;
     const firstRowHeight = Math.max(sectionHeight(a), sectionHeight(b));
     const secondRowHeight = Math.max(sectionHeight(c), sectionHeight(d));
-    const height = Math.min(
+    height = Math.min(
       MAX_HEIGHT,
       sectionsTop + firstRowHeight + SECTION_GAP + secondRowHeight + PADDING
     );
-    return { badgeRows, badgesTop, sectionsTop, firstRowHeight, height };
-  }
-
-  function draw(ctx: CanvasRenderingContext2D) {
-    if (!satellite) return;
-    const details = satelliteDetails(satellite, live, nowMs);
-
-    // The background is drawn first, under everything else.
-    const layout = cardLayout(ctx, details);
-    const { badgeRows, badgesTop, sectionsTop, firstRowHeight } = layout;
-    height = layout.height;
-    const [a, b, c, d] = details.sections;
 
     ctx.fillStyle = COLORS.background;
     ctx.beginPath();
@@ -311,7 +250,8 @@ export function createXRSatelliteCard(
     satellite = next;
     closeHovered = false;
     grabHighlighted = false;
-    syncLayer();
+    layer.setVisible(next !== null);
+    layer.invalidate();
   }
 
   /** Recomputes the live position from the latest poll, as the page's card does each second. */
@@ -319,17 +259,18 @@ export function createXRSatelliteCard(
     if (!satellite) return;
     nowMs = now;
     live = liveStateAt(snapshot, satellite.id, now);
-    syncLayer();
+    layer.invalidate();
   }
 
   /**
    * What the ray points at on the card, with the point it meets in `object`'s space and the
-   * distance to it; null if it misses the card and its grab bar.
+   * distance to it; null if it misses the card and its grab bar, including the transparent space
+   * below a short card.
    */
   function hitTest(
     raycaster: Raycaster
   ): { region: CardRegion; local: Vector3; distance: number } | null {
-    const hit = layer?.hitTest(raycaster);
+    const hit = layer.hitTest(raycaster);
     if (!hit) return null;
     const { x, y, local, distance } = hit;
     if (y > height) {
@@ -344,39 +285,25 @@ export function createXRSatelliteCard(
   function setCloseHovered(hovered: boolean) {
     if (hovered === closeHovered) return;
     closeHovered = hovered;
-    layer?.invalidate();
+    layer.invalidate();
   }
 
   function setGrabHighlighted(highlighted: boolean) {
     if (highlighted === grabHighlighted) return;
     grabHighlighted = highlighted;
-    layer?.invalidate();
-  }
-
-  /** Whether the current session shows the card as layers (see canvasLayer). */
-  function setUsesLayers(value: boolean) {
-    usesLayers = value;
-    for (const each of layers.values()) each.setUsesLayers(value);
-  }
-
-  function update() {
-    for (const each of layers.values()) each.update();
-  }
-
-  function dispose() {
-    for (const each of layers.values()) each.dispose();
+    layer.invalidate();
   }
 
   return {
-    object: root,
-    setUsesLayers,
+    object: layer.object,
+    setUsesLayers: layer.setUsesLayers,
     show,
     refresh,
     hitTest,
     setCloseHovered,
     setGrabHighlighted,
-    update,
-    dispose,
+    update: layer.update,
+    dispose: layer.dispose,
   };
 }
 
