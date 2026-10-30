@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { SatelliteInfo } from "../api/satellites";
+import { formatCount } from "../format";
 import "./SatelliteList.css";
 
 // Must match .satellite-list__item's height in SatelliteList.css.
@@ -46,8 +47,8 @@ function SatelliteList({
           {loading
             ? "Satellites"
             : satellites.length === totalCount
-              ? `Satellites (${totalCount})`
-              : `Satellites (${satellites.length} of ${totalCount})`}
+              ? `Satellites (${formatCount(totalCount)})`
+              : `Satellites (${formatCount(satellites.length)} of ${formatCount(totalCount)})`}
         </span>
         {/* A menu icon signals that the header opens and closes the list. */}
         <svg

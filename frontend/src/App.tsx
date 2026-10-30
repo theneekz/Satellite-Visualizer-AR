@@ -18,7 +18,7 @@ import {
   isFiltering,
   type SatelliteFilters,
 } from "./filters";
-import { usePositionsPolling } from "./hooks/usePositionsPolling";
+import { usePropagatedPositions } from "./hooks/usePropagatedPositions";
 
 // ?renderer=three swaps in the Three.js globe to compare it with the hand-written WebGPU one, and
 // ?renderer=xr is that globe on WebGL with buttons to enter VR/AR on a headset. It is
@@ -35,7 +35,7 @@ function App() {
   const [filters, setFilters] = useState<SatelliteFilters>(DEFAULT_FILTERS);
   // While an XR session runs, the headset shows its own list, so the page's isn't mounted.
   const [presentingXR, setPresentingXR] = useState(false);
-  const positionsRef = usePositionsPolling();
+  const positionsRef = usePropagatedPositions(satellites);
 
   useEffect(() => {
     const controller = new AbortController();

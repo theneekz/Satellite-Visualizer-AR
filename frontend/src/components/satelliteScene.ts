@@ -12,8 +12,8 @@ export const PICK_RADIUS_PX = 10;
 
 /**
  * Writes satellite `index`'s position `dt` seconds after the snapshot into `out`, in globe units
- * (Earth radius = 1). `data` holds each satellite's GCRS position and velocity (km, km/s). This is
- * the same straight-line step the vertex shaders compute. GCRS has Z as the polar axis and the
+ * (Earth radius = 1). `data` holds each satellite's TEME position and velocity (km, km/s). This is
+ * the same straight-line step the vertex shaders compute. TEME has Z as the polar axis and the
  * globe uses Y, so the axes are rotated (no mirroring).
  */
 export function scenePositionAt(
