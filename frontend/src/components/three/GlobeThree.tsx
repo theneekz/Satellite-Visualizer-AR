@@ -552,21 +552,27 @@ function GlobeThree({
     function handlePanelDrag() {
       if (!panelDrag) return;
       pointOnRay(panelDrag.controller, panelDrag.distance, panelGrabPoint);
-      // The camera holds the headset's pose from the last frame.
-      const dx = camera.position.x - panelGrabPoint.x;
-      const dy = camera.position.y - panelGrabPoint.y;
-      const dz = camera.position.z - panelGrabPoint.z;
-      // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
-      // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
-      panelFacing.set(
-        -Math.atan2(dy, Math.hypot(dx, dz)),
-        Math.atan2(dx, dz),
-        0
-      );
       const { object } = panelDrag;
-      object.quaternion.setFromEuler(panelFacing);
-      panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
-      object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      // The panel aims from its center, not the grab point. The grab bar sits below the center, so
+      // aiming from the grab point tilts the panel off the head, most for the tall list. The
+      // center depends on the facing too, so two passes settle both; the offset is small next to
+      // the distance, so the second pass is nearly exact.
+      for (let pass = 0; pass < 2; pass++) {
+        // The camera holds the headset's pose from the last frame.
+        const dx = camera.position.x - object.position.x;
+        const dy = camera.position.y - object.position.y;
+        const dz = camera.position.z - object.position.z;
+        // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
+        // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
+        panelFacing.set(
+          -Math.atan2(dy, Math.hypot(dx, dz)),
+          Math.atan2(dx, dz),
+          0
+        );
+        object.quaternion.setFromEuler(panelFacing);
+        panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
+        object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      }
     }
 
     /** The satellite the controller's ray points at, or null. */
