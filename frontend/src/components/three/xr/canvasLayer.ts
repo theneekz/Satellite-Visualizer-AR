@@ -12,7 +12,6 @@ import {
   Raycaster,
   Scene,
   Vector3,
-  type Intersection,
   type WebGPURenderer,
 } from "three/webgpu";
 
@@ -155,25 +154,33 @@ export function createCanvasLayer(
     texture.needsUpdate = true;
   }
 
-  const hits: Intersection[] = [];
-
   /**
    * Where the ray meets the panel's front, as layout pixels from its top left and as a point in
-   * `object`'s space, with the distance along the ray; or null if it misses or the panel is hidden.
+   * `object`'s space, with the distance along the ray; or null if it misses the panel's front or
+   * the panel is hidden. Unlike a raycast of the plane, this ignores the layer's bounds, so the
+   * caller decides what counts as inside. Points outside the layer are still reported.
    */
-  function hitTest(raycaster: Raycaster) {
+  function hitPlane(raycaster: Raycaster) {
     if (!visible) return null;
-    hits.length = 0;
     // The panel may have moved since the last render.
     object.updateMatrixWorld();
-    plane.raycast(raycaster, hits);
-    const hit = hits[0];
-    if (!hit?.uv) return null;
+    const normal = new Vector3(0, 0, 1).applyQuaternion(
+      object.getWorldQuaternion(new Quaternion())
+    );
+    const facing = raycaster.ray.direction.dot(normal);
+    // Only the front, which faces +Z like the layer's plane.
+    if (facing >= 0) return null;
+    const origin = object.getWorldPosition(new Vector3());
+    const distance =
+      origin.sub(raycaster.ray.origin).dot(normal) / facing;
+    if (distance < 0) return null;
+    const point = raycaster.ray.at(distance, new Vector3());
+    const local = object.worldToLocal(point);
     return {
-      x: hit.uv.x * width,
-      y: (1 - hit.uv.y) * height,
-      local: object.worldToLocal(hit.point.clone()),
-      distance: hit.distance,
+      x: local.x / metersPerPixel + width / 2,
+      y: height / 2 - local.y / metersPerPixel,
+      local,
+      distance,
     };
   }
 
@@ -191,7 +198,7 @@ export function createCanvasLayer(
     setUsesLayers,
     invalidate,
     update,
-    hitTest,
+    hitPlane,
     dispose,
   };
 }

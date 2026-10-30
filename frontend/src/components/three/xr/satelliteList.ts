@@ -17,10 +17,10 @@ import {
 } from "../../../constants";
 import { sentenceCase } from "../../../format";
 import { createCanvasLayer } from "./canvasLayer";
+import { createGrabBar } from "./grabBar";
 import {
   CLOSE_SIZE,
   COLORS,
-  GRAB_SPACE,
   LINE_HEIGHT,
   METERS_PER_PIXEL,
   PADDING,
@@ -28,7 +28,6 @@ import {
   TEXT_SIZE,
   TITLE_SIZE,
   drawCloseButton,
-  drawGrabBar,
   drawText,
   font,
   isOnCloseButton,
@@ -65,7 +64,8 @@ const SCROLLBAR_WIDTH = 4;
 const SCROLLBAR_MIN_HEIGHT = 24;
 // The rows leave a gutter on the right for the scrollbar.
 const ROWS_RIGHT = WIDTH - PADDING - SCROLLBAR_WIDTH - 6;
-const LAYER_HEIGHT = HEIGHT + GRAB_SPACE;
+// The layer is exactly the list; the grab bar has its own layer below it.
+const LAYER_HEIGHT = HEIGHT;
 
 type ChipFilter = "objectType" | "size";
 
@@ -185,6 +185,22 @@ export function createXRSatelliteList(
     quaternion,
     draw,
   });
+
+  // The grab bar sits under the list in its own layer, moving with it.
+  const grabBar = createGrabBar(renderer);
+  grabBar.place(LAYER_HEIGHT, HEIGHT);
+  grabBar.setVisible(false);
+  layer.object.add(grabBar.object);
+
+  function setUsesLayers(value: boolean) {
+    layer.setUsesLayers(value);
+    grabBar.setUsesLayers(value);
+  }
+
+  function update() {
+    layer.update();
+    grabBar.update();
+  }
 
   // The hidden input the system keyboard types into. It has to be in the DOM and focusable.
   const input = document.createElement("input");
@@ -572,7 +588,6 @@ export function createXRSatelliteList(
 
     drawRows(ctx);
 
-    drawGrabBar(ctx, WIDTH, HEIGHT, grabHighlighted);
   }
 
   /** Updates the rows, the count, and whether they are still loading; cheap when unchanged. */
@@ -638,6 +653,8 @@ export function createXRSatelliteList(
     open = next;
     hoveredKey = null;
     grabHighlighted = false;
+    grabBar.setHighlighted(false);
+    grabBar.setVisible(next);
     cancelPointer();
     if (!next) input.blur();
     layer.setVisible(next);
@@ -649,7 +666,7 @@ export function createXRSatelliteList(
    * distance to it; null if it misses the list and its grab bar, or the list is closed.
    */
   function hitTest(raycaster: Raycaster): ListHit | null {
-    const hit = layer.hitTest(raycaster);
+    const hit = layer.hitPlane(raycaster);
     if (!hit) return null;
     const { x, y, local, distance } = hit;
     const result = (
@@ -665,6 +682,7 @@ export function createXRSatelliteList(
     });
     if (y > HEIGHT)
       return isOnGrabBar(x, y, WIDTH, HEIGHT) ? result("grab", null) : null;
+    if (x < 0 || x > WIDTH || y < 0) return null;
     if (isOnCloseButton(x, y, CLOSE_X, CLOSE_Y))
       return result("list", { kind: "close" });
     const inside = (left: number, top: number, width: number, height: number) =>
@@ -708,6 +726,7 @@ export function createXRSatelliteList(
     if (key === hoveredKey && grab === grabHighlighted) return;
     hoveredKey = key;
     grabHighlighted = grab;
+    grabBar.setHighlighted(grab);
     layer.invalidate();
   }
 
@@ -813,11 +832,12 @@ export function createXRSatelliteList(
     input.removeEventListener("keydown", handleKeyDown);
     input.remove();
     layer.dispose();
+    grabBar.dispose();
   }
 
   return {
     object: layer.object,
-    setUsesLayers: layer.setUsesLayers,
+    setUsesLayers,
     setSatellites,
     setFilters,
     setSelected,
@@ -830,7 +850,7 @@ export function createXRSatelliteList(
     pointerMove,
     pointerUp,
     cancelPointer,
-    update: layer.update,
+    update,
     dispose,
   };
 }
