@@ -213,9 +213,13 @@ function GlobeThree({
     const container = containerRef.current!;
     let disposed = false;
 
+    // Without navigator.gpu, pick WebGL 2 before creating the renderer. The WebGPU backend claims
+    // the canvas with a "webgpu" context first, so three's own fallback to WebGL 2 would get null
+    // from getContext("webgl2") on that same canvas.
+    const useWebGL = xr || !("gpu" in navigator);
     // Pixel ratio 1 and no MSAA, like the WebGPU renderer, so the two are compared like for like.
     // XR gets MSAA, since aliasing shimmers badly in a headset.
-    const renderer = new WebGPURenderer({ antialias: xr, forceWebGL: xr });
+    const renderer = new WebGPURenderer({ antialias: xr, forceWebGL: useWebGL });
     renderer.setPixelRatio(1);
     // Shade in display space like the WebGPU renderer (no sRGB conversion), so colors match.
     renderer.outputColorSpace = LinearSRGBColorSpace;
