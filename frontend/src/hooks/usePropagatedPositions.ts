@@ -6,9 +6,10 @@ import type {
   PropagatorResponse,
 } from "../propagation/propagator.worker";
 
-// The renderers move each satellite in a straight line between snapshots, which drifts a few km
-// from its true orbit over this interval.
-const PROPAGATION_INTERVAL_MS = 30 * 1000;
+// The renderers move each satellite in a straight line between snapshots, which drifts about 5 m
+// from its true orbit over this interval. A pass over the catalog takes ~50 ms in the
+// worker on desktop, so this leaves it idle most of the time.
+const PROPAGATION_INTERVAL_MS = 1000;
 
 /**
  * Propagates every satellite in a worker every PROPAGATION_INTERVAL_MS and keeps the latest
