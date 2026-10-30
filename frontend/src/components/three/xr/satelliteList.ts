@@ -15,7 +15,7 @@ import {
   FIRST_LAUNCH_YEAR,
   SEARCH_DEBOUNCE_MS,
 } from "../../../constants";
-import { sentenceCase } from "../../../format";
+import { formatCount, sentenceCase } from "../../../format";
 import { createCanvasLayer } from "./canvasLayer";
 import {
   CLOSE_SIZE,
@@ -522,8 +522,8 @@ export function createXRSatelliteList(
     const title = loading
       ? "Satellites"
       : satellites.length === totalCount
-        ? `Satellites (${totalCount})`
-        : `Satellites (${satellites.length} of ${totalCount})`;
+        ? `Satellites (${formatCount(totalCount)})`
+        : `Satellites (${formatCount(satellites.length)} of ${formatCount(totalCount)})`;
     ctx.fillStyle = COLORS.text;
     drawText(
       ctx,
