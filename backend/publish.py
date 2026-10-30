@@ -123,8 +123,9 @@ def main() -> None:
     log(f"{payload.count} of {len(records)} records parsed; version {payload.version}")
 
     if args.output:
-        Path(args.output).write_bytes(payload.body_gz)
-        log(f"wrote {len(payload.body_gz) / 1e6:.2f} MB to {args.output}")
+        Path(args.output).with_suffix(".pb.gz").write_bytes(payload.body_gz)
+        Path(args.output).with_suffix(".json").write_text(json.dumps(records))
+        log(f"wrote {len(payload.body_gz) / 1e6:.2f} MB to {args.output}.pb.gz")
     else:
         if not os.environ.get("GITHUB_ACTIONS"):
             load_dotenv()

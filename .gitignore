@@ -11,4 +11,4 @@ __pycache__/
 .DS_Store
 
 # Raw data dumps (see README for how to download)
-backend/spacebook_*.json
+backend/spacebook_*
