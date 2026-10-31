@@ -21,14 +21,14 @@ export const FRAMING_DISTANCE_FACTOR = 1.5;
 // The far clip plane sits this far beyond the globe's center. The farthest catalogued object
 // reaches about 84 (a 526,000 km apogee), so nothing gets clipped.
 const FAR_MARGIN = 100;
-// The canvas fills the window but never shrinks below a usable size (the page scrolls instead).
-const MIN_CANVAS_PX = 480;
-
-/** The canvas size: the window's, but at least MIN_CANVAS_PX on each side. */
+/**
+ * The canvas size: the window's. It must match the window exactly, or the globe's center is off
+ * on a phone, where a wider canvas overflows the screen. A 1px floor keeps it from collapsing.
+ */
 export function canvasSize() {
   return {
-    width: Math.max(MIN_CANVAS_PX, Math.floor(window.innerWidth)),
-    height: Math.max(MIN_CANVAS_PX, Math.floor(window.innerHeight)),
+    width: Math.max(1, Math.floor(window.innerWidth)),
+    height: Math.max(1, Math.floor(window.innerHeight)),
   };
 }
 
