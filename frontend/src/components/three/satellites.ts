@@ -29,7 +29,7 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../../api/satellites";
-import { EARTH_RADIUS_KM } from "../../constants";
+import { EARTH_MU, EARTH_RADIUS_KM } from "../../constants";
 import {
   SATELLITE_SIZE_PX,
   pickNearest,
@@ -50,8 +50,8 @@ const QUAD_CORNERS = new Float32Array([
 
 /**
  * Every satellite as one instanced draw of screen-facing squares. Each instance holds its
- * propagated TEME position and velocity; the vertex shader moves it in a straight line by the time
- * since the snapshot, exactly like the WebGPU renderer. The mesh belongs in the inertial
+ * propagated TEME position and velocity; the vertex shader steps it forward by the time since the
+ * snapshot along a path curved by Earth's gravity, exactly like the WebGPU renderer. The mesh belongs in the inertial
  * (camera-rotated) group, not in the spinning Earth.
  */
 export function createSatellites() {
@@ -64,9 +64,17 @@ export function createSatellites() {
   const angularSizing = uniform(0);
 
   const isSelected = instanceIndex.toFloat().equal(selectedIndex);
-  const teme = attribute("satPosition", "vec3").add(
-    attribute("satVelocity", "vec3").mul(dt)
-  );
+  // A straight line plus Earth's gravity at the starting point. Matches stepTeme in
+  // satelliteScene.ts.
+  const satPosition = attribute("satPosition", "vec3");
+  const radius = satPosition.length();
+  const gravity = dt
+    .mul(dt)
+    .mul(-0.5 * EARTH_MU)
+    .div(radius.mul(radius).mul(radius));
+  const teme = satPosition
+    .add(attribute("satVelocity", "vec3").mul(dt))
+    .add(satPosition.mul(gravity));
   // TEME has Z as the polar axis; the scene uses Y. Proper rotation (no mirroring), then km are
   // scaled so the Earth's radius is 1 like the globe mesh.
   const local = vec3(teme.x, teme.z, teme.y.negate()).div(EARTH_RADIUS_KM);

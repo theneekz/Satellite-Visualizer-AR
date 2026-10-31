@@ -1,5 +1,5 @@
 import { FLOATS_PER_SATELLITE } from "../api/satellites";
-import { EARTH_RADIUS_KM } from "../constants";
+import { EARTH_MU, EARTH_RADIUS_KM } from "../constants";
 
 /**
  * Satellite placement and picking shared by the WebGPU renderer (satellite.ts) and the Three.js
@@ -11,10 +11,33 @@ export const SATELLITE_SIZE_PX = 12;
 export const PICK_RADIUS_PX = 10;
 
 /**
+ * Moves a TEME state (km, km/s) forward `dt` seconds and writes the position into `out`: a
+ * straight-line step plus Earth's gravity at the starting point, so the path curves with the
+ * orbit. Over the 30 s between snapshots, that stays within tens of meters of SGP4 for low orbits,
+ * versus a few km for a straight line. The vertex shaders compute the same step.
+ */
+export function stepTeme(
+  x: number,
+  y: number,
+  z: number,
+  vx: number,
+  vy: number,
+  vz: number,
+  dt: number,
+  out: number[]
+) {
+  const r = Math.hypot(x, y, z);
+  const gravity = (-0.5 * EARTH_MU * dt * dt) / (r * r * r);
+  out[0] = x + vx * dt + x * gravity;
+  out[1] = y + vy * dt + y * gravity;
+  out[2] = z + vz * dt + z * gravity;
+}
+
+/**
  * Writes satellite `index`'s position `dt` seconds after the snapshot into `out`, in globe units
- * (Earth radius = 1). `data` holds each satellite's TEME position and velocity (km, km/s). This is
- * the same straight-line step the vertex shaders compute. TEME has Z as the polar axis and the
- * globe uses Y, so the axes are rotated (no mirroring).
+ * (Earth radius = 1). `data` holds each satellite's TEME position and velocity (km, km/s), stepped
+ * with `stepTeme`. TEME has Z as the polar axis and the globe uses Y, so the axes are rotated (no
+ * mirroring).
  */
 export function scenePositionAt(
   data: ArrayLike<number>,
@@ -23,9 +46,20 @@ export function scenePositionAt(
   out: number[]
 ) {
   const o = index * FLOATS_PER_SATELLITE;
-  out[0] = (data[o] + data[o + 3] * dt) / EARTH_RADIUS_KM;
-  out[1] = (data[o + 2] + data[o + 5] * dt) / EARTH_RADIUS_KM;
-  out[2] = -(data[o + 1] + data[o + 4] * dt) / EARTH_RADIUS_KM;
+  stepTeme(
+    data[o],
+    data[o + 1],
+    data[o + 2],
+    data[o + 3],
+    data[o + 4],
+    data[o + 5],
+    dt,
+    out
+  );
+  const [x, y, z] = out;
+  out[0] = x / EARTH_RADIUS_KM;
+  out[1] = z / EARTH_RADIUS_KM;
+  out[2] = -y / EARTH_RADIUS_KM;
 }
 
 /**

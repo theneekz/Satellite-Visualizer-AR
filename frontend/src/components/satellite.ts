@@ -2,7 +2,7 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../api/satellites";
-import { EARTH_RADIUS_KM } from "../constants";
+import { EARTH_MU, EARTH_RADIUS_KM } from "../constants";
 import {
   SATELLITE_SIZE_PX,
   pickNearest,
@@ -38,8 +38,11 @@ const SHADER_SOURCE = /* wgsl */ `
       vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
       vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
     );
-    // Straight-line step from the snapshot's state (TEME, km) to the current time.
-    let teme = position + velocity * uniforms.dt;
+    // Steps the snapshot's state (TEME, km) to the current time: a straight line plus Earth's
+    // gravity at the starting point. Matches stepTeme in satelliteScene.ts.
+    let r = length(position);
+    let gravity = -0.5 * ${EARTH_MU} * uniforms.dt * uniforms.dt / (r * r * r);
+    let teme = position + velocity * uniforms.dt + position * gravity;
     // TEME has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
     // then km are scaled so the Earth's radius is 1 like the globe mesh.
     let world = vec3f(teme.x, teme.z, -teme.y) / ${EARTH_RADIUS_KM};
@@ -67,8 +70,9 @@ const SHADER_SOURCE = /* wgsl */ `
 /**
  * Draws every satellite in the latest snapshot as a small square in the same render pass as the
  * globe. Each satellite is one instance holding its propagated position and velocity; the vertex
- * shader moves it in a straight line by the time elapsed since the snapshot. That is accurate to
- * a few km over the ~30 s between snapshots, and each new snapshot re-anchors it.
+ * shader steps it forward by the time elapsed since the snapshot, along a path curved by Earth's
+ * gravity. That stays within tens of meters over the ~30 s between snapshots, and each new
+ * snapshot re-anchors it.
  */
 export function createSatelliteRenderer(
   device: GPUDevice,
