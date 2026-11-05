@@ -520,10 +520,10 @@ export function createXRSatelliteList(
 
     // Header: the title with the count, as on the page, and the close button.
     const title = loading
-      ? "Satellites"
+      ? "Artificial Space Objects"
       : satellites.length === totalCount
-        ? `Satellites (${formatCount(totalCount)})`
-        : `Satellites (${formatCount(satellites.length)} of ${formatCount(totalCount)})`;
+        ? `Artificial Space Objects (${formatCount(totalCount)})`
+        : `Artificial Space Objects (${formatCount(satellites.length)} of ${formatCount(totalCount)})`;
     ctx.fillStyle = COLORS.text;
     drawText(
       ctx,

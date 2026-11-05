@@ -45,10 +45,10 @@ function SatelliteList({
       >
         <span className="satellite-list__title">
           {loading
-            ? "Satellites"
+            ? "Artificial Space Objects"
             : satellites.length === totalCount
-              ? `Satellites (${formatCount(totalCount)})`
-              : `Satellites (${formatCount(satellites.length)} of ${formatCount(totalCount)})`}
+              ? `Artificial Space Objects (${formatCount(totalCount)})`
+              : `Artificial Space Objects (${formatCount(satellites.length)} of ${formatCount(totalCount)})`}
         </span>
         {/* A menu icon signals that the header opens and closes the list. */}
         <svg
@@ -122,13 +122,13 @@ function ListBody({
       {children}
       {loading ? (
         <p className="satellite-list__message" role="status">
-          Loading satellites...
+          Loading Artificial Space Objects...
         </p>
       ) : satellites.length === 0 ? (
         <p className="satellite-list__message">
           {totalCount > 0
-            ? "No satellites match your filters."
-            : "No satellites found."}
+            ? "No Artificial Space Objects match your filters."
+            : "No Artificial Space Objects found."}
         </p>
       ) : (
         <div className="satellite-list__items" ref={scrollRef}>
