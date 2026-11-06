@@ -88,9 +88,6 @@ const BADGE_PADDING_Y = 2;
 export const BADGE_HEIGHT = TEXT_SIZE * LINE_HEIGHT + 2 * BADGE_PADDING_Y;
 
 const CLOSE_ICON_SIZE = 20;
-// The grab bar widens by this much on each side under a ray or while dragged.
-const GRAB_HIGHLIGHT_GROW = 12;
-
 export function font(size: number, weight = FONT_WEIGHT_REGULAR) {
   return `${weight} ${size}px ${FONT_FAMILY}`;
 }
@@ -196,22 +193,20 @@ export function isOnCloseButton(
 }
 
 /**
- * Draws the grab bar under a panel `panelWidth` wide whose bottom is at `panelHeight`. It
- * brightens and widens a little under a ray or while dragged.
+ * Draws the grab bar on its own canvas, `GRAB_SPACE` tall, whose top is the panel's bottom edge
+ * and `panelWidth` wide. It brightens under a ray or while dragged, but keeps its length.
  */
 export function drawGrabBar(
   ctx: CanvasRenderingContext2D,
   panelWidth: number,
-  panelHeight: number,
   highlighted: boolean
 ) {
-  const grow = highlighted ? GRAB_HIGHLIGHT_GROW : 0;
   ctx.fillStyle = highlighted ? COLORS.grabActive : COLORS.grab;
   ctx.beginPath();
   ctx.roundRect(
-    (panelWidth - GRAB_WIDTH) / 2 - grow,
-    panelHeight + GRAB_GAP,
-    GRAB_WIDTH + 2 * grow,
+    (panelWidth - GRAB_WIDTH) / 2,
+    GRAB_GAP,
+    GRAB_WIDTH,
     GRAB_HEIGHT,
     GRAB_HEIGHT / 2
   );

@@ -172,6 +172,7 @@ export function createCanvasLayer(
     return {
       x: hit.uv.x * width,
       y: (1 - hit.uv.y) * height,
+      point: hit.point.clone(),
       local: object.worldToLocal(hit.point.clone()),
       distance: hit.distance,
     };

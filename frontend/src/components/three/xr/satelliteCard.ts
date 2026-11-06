@@ -13,12 +13,12 @@ import {
   type DetailSection,
 } from "../../satelliteDetails";
 import { createCanvasLayer } from "./canvasLayer";
+import { createGrabBar } from "./grabBar";
 import {
   BADGE_COLORS,
   BADGE_HEIGHT,
   CLOSE_SIZE,
   COLORS,
-  GRAB_SPACE,
   LINE_HEIGHT,
   METERS_PER_PIXEL,
   PADDING,
@@ -29,17 +29,15 @@ import {
   badgeWidth,
   drawBadge,
   drawCloseButton,
-  drawGrabBar,
   drawText,
   isOnCloseButton,
-  isOnGrabBar,
 } from "./panelStyle";
 
 // Layout, in layout pixels. The page's card is one 300px column; in the room the four sections
 // sit in a 2x2 grid instead, so the card stays within a comfortable field of view.
 const WIDTH = 520;
-// The layer's size is fixed when it is created, so it fits the tallest card (badges on two rows)
-// with the grab bar below it. A shorter card leaves the rest transparent.
+// The layer's size is fixed when it is created, so it fits the tallest card (badges on two rows).
+// A shorter card leaves the rest transparent. The grab bar has its own layer below this one.
 const MAX_HEIGHT = 448;
 const COLUMN_GAP = 24;
 const COLUMN_WIDTH = (WIDTH - 2 * PADDING - COLUMN_GAP) / 2;
@@ -50,7 +48,7 @@ const METRIC_HEIGHT = (TEXT_SIZE + VALUE_SIZE) * LINE_HEIGHT;
 const SECTION_GAP = 12;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
-const LAYER_HEIGHT = MAX_HEIGHT + GRAB_SPACE;
+const LAYER_HEIGHT = MAX_HEIGHT;
 
 export type CardRegion = "close" | "grab" | "card";
 
@@ -80,6 +78,9 @@ export function createXRSatelliteCard(
     quaternion,
     draw,
   });
+  // Under the card, moving with it since it is a child of the card's object.
+  const grabBar = createGrabBar(renderer, WIDTH);
+  layer.object.add(grabBar.object);
 
   function drawMetric(
     ctx: CanvasRenderingContext2D,
@@ -241,7 +242,6 @@ export function createXRSatelliteCard(
     drawSection(ctx, c, details, PADDING, secondRowTop);
     drawSection(ctx, d, details, rightX, secondRowTop);
 
-    drawGrabBar(ctx, WIDTH, height, grabHighlighted);
   }
 
   /** Shows the card for this satellite, or hides it for null. */
@@ -250,8 +250,17 @@ export function createXRSatelliteCard(
     satellite = next;
     closeHovered = false;
     grabHighlighted = false;
+    grabBar.setHighlighted(false);
     layer.setVisible(next !== null);
+    grabBar.setVisible(next !== null);
     layer.invalidate();
+  }
+
+  /** Redraws what changed, then moves the grab bar under the card's drawn height. */
+  function update() {
+    layer.update();
+    grabBar.placeBelow(height, LAYER_HEIGHT);
+    grabBar.update();
   }
 
   /** Recomputes the live position from the latest snapshot, as the page's card does each second. */
@@ -270,14 +279,20 @@ export function createXRSatelliteCard(
   function hitTest(
     raycaster: Raycaster
   ): { region: CardRegion; local: Vector3; distance: number } | null {
+    // Tested first, so the card's own layer updates the matrices the bar's test relies on.
     const hit = layer.hitTest(raycaster);
+    const bar = grabBar.hitTest(raycaster);
+    if (bar) {
+      return {
+        region: "grab",
+        local: layer.object.worldToLocal(bar.point.clone()),
+        distance: bar.distance,
+      };
+    }
     if (!hit) return null;
     const { x, y, local, distance } = hit;
-    if (y > height) {
-      return isOnGrabBar(x, y, WIDTH, height)
-        ? { region: "grab", local, distance }
-        : null;
-    }
+    // Below a short card the layer is transparent, which is not part of the card.
+    if (y > height) return null;
     const onClose = isOnCloseButton(x, y, CLOSE_X, CLOSE_Y);
     return { region: onClose ? "close" : "card", local, distance };
   }
@@ -291,19 +306,25 @@ export function createXRSatelliteCard(
   function setGrabHighlighted(highlighted: boolean) {
     if (highlighted === grabHighlighted) return;
     grabHighlighted = highlighted;
-    layer.invalidate();
+    grabBar.setHighlighted(highlighted);
   }
 
   return {
     object: layer.object,
-    setUsesLayers: layer.setUsesLayers,
+    setUsesLayers: (value: boolean) => {
+      layer.setUsesLayers(value);
+      grabBar.setUsesLayers(value);
+    },
     show,
     refresh,
     hitTest,
     setCloseHovered,
     setGrabHighlighted,
-    update: layer.update,
-    dispose: layer.dispose,
+    update,
+    dispose: () => {
+      layer.dispose();
+      grabBar.dispose();
+    },
   };
 }
 
