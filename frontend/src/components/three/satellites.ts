@@ -33,6 +33,7 @@ import { EARTH_RADIUS_KM } from "../../constants";
 import {
   SATELLITE_SIZE_PX,
   pickNearest,
+  extrapolationSeconds,
   scenePositionAt,
   segmentHitsGlobe,
 } from "../satelliteScene";
@@ -203,7 +204,7 @@ export function createSatellites() {
     viewportWidth: number,
     viewportHeight: number
   ) {
-    dt.value = (simTimeMs - snapshotTimeMs) / 1000;
+    dt.value = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     viewport.value.set(viewportWidth, viewportHeight);
   }
 

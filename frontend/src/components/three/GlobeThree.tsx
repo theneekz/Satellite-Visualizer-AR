@@ -844,7 +844,7 @@ function GlobeThree({
         .catch(() => {});
     }
 
-    // The simulated "now" the satellites are drawn at; the Earth and Sun use the same instant.
+    // The "now" the satellites are drawn at; the Earth and Sun use the same instant.
     let simTimeMs = Date.now();
     let lastFrameTime = performance.now();
     let lastSnapshot: PositionsSnapshot | null = null;
@@ -855,7 +855,10 @@ function GlobeThree({
       const now = performance.now();
       const frameDt = (now - lastFrameTime) / 1000;
       lastFrameTime = now;
-      simTimeMs += frameDt * 1000;
+      // Read the wall clock every frame instead of adding up frame times. performance.now() stops
+      // while the computer sleeps, so a summed clock falls behind the snapshots (which use
+      // Date.now()) by the sleep's length and the satellites are drawn far off their orbits.
+      simTimeMs = Date.now();
 
       // Re-upload when a new snapshot arrives or the filter changes.
       const snapshot = positionsRef.current;
