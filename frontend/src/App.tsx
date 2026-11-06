@@ -11,6 +11,7 @@ import Globe from "./components/Globe";
 import SatelliteCard from "./components/SatelliteCard";
 import SatelliteFilterBar from "./components/SatelliteFilterBar";
 import SatelliteList from "./components/SatelliteList";
+import SidePanel, { type XRControls } from "./components/SidePanel";
 import {
   DEFAULT_FILTERS,
   filterSatellites,
@@ -41,6 +42,13 @@ function App({ xrSupported }: AppProps) {
   const [filters, setFilters] = useState<SatelliteFilters>(DEFAULT_FILTERS);
   // While an XR session runs, the headset shows its own list, so the page's isn't mounted.
   const [presentingXR, setPresentingXR] = useState(false);
+  // How to enter VR or AR, once the XR globe knows which modes this device supports.
+  const [xrControls, setXRControls] = useState<XRControls | null>(null);
+  const handleXRModes = useCallback(
+    (modes: XRSessionMode[], start: (mode: XRSessionMode) => void) =>
+      setXRControls(modes.length > 0 ? { modes, start } : null),
+    []
+  );
   const positionsRef = usePropagatedPositions(satellites);
 
   useEffect(() => {
@@ -90,20 +98,22 @@ function App({ xrSupported }: AppProps) {
   return (
     <main>
       {!presentingXR && (
-        <SatelliteList
-          satellites={filtered}
-          totalCount={satellites.length}
-          loading={loading}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        >
-          <SatelliteFilterBar
-            filters={filters}
-            options={filterOptions}
-            onChange={patchFilters}
-            onReset={resetFilters}
-          />
-        </SatelliteList>
+        <SidePanel xr={xrControls}>
+          <SatelliteList
+            satellites={filtered}
+            totalCount={satellites.length}
+            loading={loading}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          >
+            <SatelliteFilterBar
+              filters={filters}
+              options={filterOptions}
+              onChange={patchFilters}
+              onReset={resetFilters}
+            />
+          </SatelliteList>
+        </SidePanel>
       )}
       {useThree ? (
         <Suspense fallback={null}>
@@ -124,6 +134,7 @@ function App({ xrSupported }: AppProps) {
             onSelect={setSelectedId}
             xr={useXR}
             onPresentingChange={setPresentingXR}
+            onXRModesChange={handleXRModes}
           />
         </Suspense>
       ) : (
