@@ -194,6 +194,7 @@ function GlobeThree({
   selectedSatellite,
   xrList,
   onPresentingChange,
+  onXRModesChange,
   onSelect,
   xr = false,
 }: {
@@ -210,6 +211,13 @@ function GlobeThree({
   xr?: boolean;
   // Told when an XR session starts and ends, so the page can unmount what the headset can't show.
   onPresentingChange?: (presenting: boolean) => void;
+  // Told which immersive modes this device supports, with a function that enters one. The page
+  // shows its own Enter VR / AR buttons; start() must be called straight from their click
+  // handler, since the browser only grants a session in response to a user gesture.
+  onXRModesChange?: (
+    modes: XRSessionMode[],
+    start: (mode: XRSessionMode) => void
+  ) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [backend, setBackend] = useState<string | null>(null);
@@ -238,6 +246,10 @@ function GlobeThree({
   useEffect(() => {
     onPresentingChange?.(presenting);
   }, [presenting, onPresentingChange]);
+
+  useEffect(() => {
+    onXRModesChange?.(xrModes, (mode) => startXRRef.current?.(mode));
+  }, [xrModes, onXRModesChange]);
 
   useEffect(() => {
     const container = containerRef.current!;
@@ -1118,19 +1130,13 @@ function GlobeThree({
       {backend && (
         <span className="renderer-backend">Three.js · {backend}</span>
       )}
-      {xrModes.length > 0 && (
+      {/* The page's panel offers Enter VR / AR; exiting is only needed while presenting, when
+          the panel is hidden. */}
+      {presenting && (
         <div className="xr-buttons">
-          {presenting ? (
-            <button onClick={() => startXRRef.current?.("immersive-vr")}>
-              Exit XR
-            </button>
-          ) : (
-            xrModes.map((mode) => (
-              <button key={mode} onClick={() => startXRRef.current?.(mode)}>
-                {mode === "immersive-ar" ? "Enter AR" : "Enter VR"}
-              </button>
-            ))
-          )}
+          <button onClick={() => startXRRef.current?.("immersive-vr")}>
+            Exit XR
+          </button>
         </div>
       )}
     </div>

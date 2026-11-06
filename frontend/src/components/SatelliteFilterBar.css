@@ -16,8 +16,8 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .satellite-filters__control {
@@ -28,9 +28,14 @@
   font-size: 0.85rem;
   color: #fff;
   color-scheme: dark;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
+  transition: border-color 0.15s;
+}
+
+.satellite-filters__control:hover {
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
 .satellite-filters__control:focus-visible {

@@ -1,74 +1,31 @@
 .satellite-list {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 260px;
-  box-sizing: border-box;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  color: #fff;
-  background: rgba(10, 12, 24, 0.55);
-  backdrop-filter: blur(6px);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-/* The header doubles as the toggle that shows and hides the rest of the list. */
-.satellite-list__toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-  width: 100%;
-  margin: 0 0 12px;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.satellite-list__title {
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.satellite-list__icon {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.satellite-list__body {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.satellite-list__body[hidden] {
-  display: none;
+.satellite-list__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
 }
 
-/* Collapsed, the list shrinks to its header, so the globe stays visible. */
-.satellite-list.is-collapsed {
-  bottom: auto;
-  padding-bottom: 12px;
-}
-
-/* On phones the list spans the top of the screen instead of a side strip. */
-@media (max-width: 600px) {
-  .satellite-list {
-    right: 0;
-    bottom: auto;
-    width: auto;
-    max-height: 60vh;
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  }
+.satellite-list__count {
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
 .satellite-list__message {
@@ -82,6 +39,20 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* On phones the whole panel scrolls, so the rows get a fixed height of their own. */
+@media (max-width: 600px) {
+  .satellite-list {
+    flex: none;
+  }
+
+  .satellite-list__items {
+    flex: none;
+    height: 50dvh;
+  }
 }
 
 .satellite-list__rows {
@@ -115,8 +86,7 @@
   text-align: left;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -125,8 +95,8 @@
 }
 
 .satellite-list__item.is-selected {
-  background: rgba(133, 183, 235, 0.16);
-  border-bottom-color: rgba(133, 183, 235, 0.4);
+  background: rgba(133, 183, 235, 0.18);
+  box-shadow: inset 2px 0 0 #85b7eb;
 }
 
 .satellite-list__item:focus-visible {
@@ -143,6 +113,7 @@
 
 .satellite-list__id {
   flex-shrink: 0;
-  opacity: 0.6;
+  font-size: 0.75rem;
+  opacity: 0.5;
   font-variant-numeric: tabular-nums;
 }
