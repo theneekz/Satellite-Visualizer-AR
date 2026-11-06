@@ -26,7 +26,12 @@ import { createSatelliteRenderer } from "./satellite";
 import { TouchPoints } from "./touchPoints";
 import { earthRotationAngle } from "./earthRotation";
 import { sunDirection } from "./sun";
-import earthTextureUrl from "../assets/earth.jpg";
+import {
+  earthPreviewUrl,
+  loadEarthBitmap,
+  sharpEarthLoadTime,
+  sharpEarthUrl,
+} from "./earthTexture";
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
@@ -74,6 +79,67 @@ const SHADER_SOURCE = /* wgsl */ `
 `;
 
 /** Procedurally builds a UV-sphere: positions + normals + UVs interleaved, plus a triangle index list. */
+/**
+ * Uploads an Earth image into a new texture with a full mip chain, then closes the bitmap.
+ * WebGPU doesn't generate mipmaps, so each level is a half-size copy of the one above it,
+ * resized by the browser.
+ */
+function createEarthTexture(device: GPUDevice, bitmap: ImageBitmap) {
+  const { width, height } = bitmap;
+  const mipLevelCount = Math.floor(Math.log2(Math.max(width, height))) + 1;
+  const texture = device.createTexture({
+    size: [width, height],
+    format: "rgba8unorm",
+    mipLevelCount,
+    usage:
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.COPY_DST |
+      GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+  device.queue.copyExternalImageToTexture(
+    { source: bitmap },
+    { texture },
+    [width, height]
+  );
+  // Level 1 is the largest level drawn here; each later level fits inside its corner.
+  const canvas = new OffscreenCanvas(
+    Math.max(1, width >> 1),
+    Math.max(1, height >> 1)
+  );
+  const context = canvas.getContext("2d")!;
+  context.imageSmoothingQuality = "high";
+  let source: CanvasImageSource = bitmap;
+  let sourceWidth = width;
+  let sourceHeight = height;
+  for (let level = 1; level < mipLevelCount; level++) {
+    const levelWidth = Math.max(1, width >> level);
+    const levelHeight = Math.max(1, height >> level);
+    // Draws the previous level, shrunk by half, into the top-left corner of the canvas. When
+    // the source is the canvas itself, the browser copies it before drawing.
+    context.drawImage(
+      source,
+      0,
+      0,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      levelWidth,
+      levelHeight
+    );
+    device.queue.copyExternalImageToTexture(
+      { source: canvas },
+      { texture, mipLevel: level },
+      [levelWidth, levelHeight]
+    );
+    source = canvas;
+    sourceWidth = levelWidth;
+    sourceHeight = levelHeight;
+  }
+  bitmap.close();
+  return texture;
+}
+
 function buildSphere(radius: number, latBands: number, lonBands: number) {
   const vertices: number[] = [];
   for (let lat = 0; lat <= latBands; lat++) {
@@ -226,43 +292,40 @@ function Globe({
         },
       });
 
-      // Load the Earth texture: fetch the bundled image, decode it into a bitmap, and
-      // upload it into a GPUTexture via copyExternalImageToTexture.
-      const earthImageResponse = await fetch(earthTextureUrl);
-      const earthImageBlob = await earthImageResponse.blob();
-      const earthBitmap = await createImageBitmap(earthImageBlob);
-      if (cancelled) return;
-
-      const earthTexture = device.createTexture({
-        size: [earthBitmap.width, earthBitmap.height],
-        format: "rgba8unorm",
-        usage:
-          GPUTextureUsage.TEXTURE_BINDING |
-          GPUTextureUsage.COPY_DST |
-          GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      device.queue.copyExternalImageToTexture(
-        { source: earthBitmap },
-        { texture: earthTexture },
-        [earthBitmap.width, earthBitmap.height]
+      // Draw the first frames with the small preview image. The sharp image loads after the
+      // render loop starts (see below), so it never delays the first frame.
+      let earthTexture = createEarthTexture(
+        device,
+        await loadEarthBitmap(earthPreviewUrl)
       );
-      earthBitmap.close();
+      if (cancelled) {
+        earthTexture.destroy();
+        return;
+      }
 
+      // Trilinear filtering across the mipmaps keeps the globe from shimmering when it's small
+      // on screen. Anisotropic filtering keeps the texture sharp near the globe's edge, where
+      // it's seen at a steep angle.
       const earthSampler = device.createSampler({
         magFilter: "linear",
         minFilter: "linear",
+        mipmapFilter: "linear",
+        maxAnisotropy: 16,
         addressModeU: "repeat",
         addressModeV: "clamp-to-edge",
       });
 
-      const bindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: uniformBuffer } },
-          { binding: 1, resource: earthTexture.createView() },
-          { binding: 2, resource: earthSampler },
-        ],
-      });
+      function createEarthBindGroup() {
+        return device.createBindGroup({
+          layout: pipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: uniformBuffer } },
+            { binding: 1, resource: earthTexture.createView() },
+            { binding: 2, resource: earthSampler },
+          ],
+        });
+      }
+      let bindGroup = createEarthBindGroup();
 
       const satellite = createSatelliteRenderer(device, format);
 
@@ -570,6 +633,24 @@ function Globe({
       }
 
       frameId = requestAnimationFrame(frame);
+
+      // Swap in the sharp image once it loads. If it fails, the globe keeps the preview.
+      sharpEarthLoadTime()
+        .then(() => loadEarthBitmap(sharpEarthUrl(false), "low"))
+        .then((bitmap) => {
+          if (cancelled) {
+            bitmap.close();
+            return;
+          }
+          // Frames already submitted finish with the old texture before it's freed.
+          const sharp = createEarthTexture(device, bitmap);
+          earthTexture.destroy();
+          earthTexture = sharp;
+          bindGroup = createEarthBindGroup();
+        })
+        .catch((err: unknown) => {
+          console.warn("Keeping the preview Earth image:", err);
+        });
 
       return () => {
         window.removeEventListener("resize", handleResize);

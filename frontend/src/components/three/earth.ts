@@ -32,16 +32,22 @@ export function createEarth(map: Texture) {
   // The night side is dimmed but stays clearly readable.
   const brightness = mix(float(0.4), dayShade, daylight);
 
+  const mapNode = texture(map);
   const material = new MeshBasicNodeMaterial();
-  material.colorNode = texture(map).rgb.mul(brightness);
+  material.colorNode = mapNode.rgb.mul(brightness);
 
   // Same tessellation as the WebGPU renderer's sphere (24 longitude x 16 latitude bands).
   const mesh = new Mesh(new SphereGeometry(1, 24, 16), material);
+
+  /** Swaps in a new Earth image. The caller disposes the old one. */
+  function setMap(next: Texture) {
+    mapNode.value = next;
+  }
 
   function dispose() {
     mesh.geometry.dispose();
     material.dispose();
   }
 
-  return { mesh, sunDirection: sunDirection.value, dispose };
+  return { mesh, sunDirection: sunDirection.value, setMap, dispose };
 }
