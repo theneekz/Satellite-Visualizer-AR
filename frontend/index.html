@@ -9,6 +9,15 @@
       content="Explore satellites and other objects orbiting Earth in real time on an interactive 3D globe, on Meta Quest, mobile or web."
     />
     <title>SatViz</title>
+    <!-- Starts the satellite data download before any JavaScript runs. getSatellites() in
+         src/api/satellites.ts reuses this response, so its fetch must stay a plain same-origin
+         GET with no custom headers, which is what crossorigin="anonymous" matches. -->
+    <link
+      rel="preload"
+      href="/v2/satellites"
+      as="fetch"
+      crossorigin="anonymous"
+    />
   </head>
   <body>
     <div id="root"></div>

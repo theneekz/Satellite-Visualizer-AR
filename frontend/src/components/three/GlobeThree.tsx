@@ -20,7 +20,7 @@ import {
   Vector3,
   WebGPURenderer,
   type Event,
-  type Texture,
+  Texture,
 } from "three/webgpu";
 import type { PositionsSnapshot, SatelliteInfo } from "../../api/satellites";
 import { gmstRadians } from "../earthRotation";
@@ -53,7 +53,11 @@ import {
   wrapAngle,
   zoomForDistance,
 } from "../camera";
-import earthTextureUrl from "../../assets/earth.jpg";
+import {
+  earthPreviewUrl,
+  sharpEarthLoadTime,
+  sharpEarthUrl,
+} from "../earthTexture";
 
 // XR: the globe floats in front of a standing user at eye height (meters, in the local-floor
 // reference space, where -Z is forward), with the Earth's radius XR_BASE_RADIUS_M at zoom 100%.
@@ -157,6 +161,32 @@ export interface XRListProps {
  *   ├─ list  (XR only; the satellite list, likewise)
  *   └─ controllers  (XR only; posed by the headset)
  */
+/**
+ * Sets up an Earth image for the globe. Three.js generates its mipmaps. Anisotropic filtering
+ * keeps it sharp near the globe's edge, where it's seen at a steep angle.
+ */
+function configureEarthMap(map: Texture) {
+  map.colorSpace = NoColorSpace;
+  map.wrapS = RepeatWrapping;
+  map.wrapT = ClampToEdgeWrapping;
+  map.anisotropy = 16;
+  return map;
+}
+
+/**
+ * Loads an image into a texture after the browser decodes it off the main thread.
+ * TextureLoader leaves decoding to the first upload, which stalls a frame on a large image.
+ */
+async function loadDecodedTexture(url: string) {
+  const image = new Image();
+  image.fetchPriority = "low";
+  image.src = url;
+  await image.decode();
+  const texture = new Texture(image);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function GlobeThree({
   positionsRef,
   visibleIds,
@@ -978,18 +1008,31 @@ function GlobeThree({
     }
 
     async function init() {
-      const loaded = await new TextureLoader().loadAsync(earthTextureUrl);
+      // Draw the first frames with the small preview image. The sharp image loads in the
+      // background and is swapped in when it arrives, so it never delays the first frame.
+      const loaded = await new TextureLoader().loadAsync(earthPreviewUrl);
       if (!disposed) await renderer.init();
       if (disposed) {
         loaded.dispose();
         return;
       }
-      map = loaded;
-      map.colorSpace = NoColorSpace;
-      map.wrapS = RepeatWrapping;
-      map.wrapT = ClampToEdgeWrapping;
+      map = configureEarthMap(loaded);
       earth = createEarth(map);
       inertial.add(earth.mesh);
+      sharpEarthLoadTime()
+        .then(() => loadDecodedTexture(sharpEarthUrl(xr)))
+        .then((sharp) => {
+          if (disposed || !earth) {
+            sharp.dispose();
+            return;
+          }
+          map?.dispose();
+          map = configureEarthMap(sharp);
+          earth.setMap(map);
+        })
+        .catch((err: unknown) => {
+          console.warn("Keeping the preview Earth image:", err);
+        });
       if (xr) {
         // To the user's right on an arc around where they stand, turned about Y to face them.
         card = createXRSatelliteCard(

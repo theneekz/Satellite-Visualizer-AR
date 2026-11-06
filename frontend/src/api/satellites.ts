@@ -93,13 +93,34 @@ function toSatelliteInfo(omm: OMM): SatelliteInfo {
   };
 }
 
+let markSatellitesSettled: () => void;
+/**
+ * Resolves once the first satellite request finishes, whether or not it succeeds. Large
+ * downloads that can wait, like the sharp Earth image, wait for this so they don't compete with
+ * the satellite data.
+ */
+export const satellitesSettled = new Promise<void>((resolve) => {
+  markSatellitesSettled = resolve;
+});
+
+/**
+ * Fetches the satellite catalog. Keep this a plain GET with no custom headers so it reuses the
+ * response that index.html preloads.
+ */
 export async function getSatellites(
   signal?: AbortSignal
 ): Promise<SatelliteInfo[]> {
-  const response = await fetch(SATELLITES_URL, { signal });
-  if (!response.ok) {
-    throw new Error(`GET /v2/satellites failed with status ${response.status}`);
+  try {
+    const response = await fetch(SATELLITES_URL, { signal });
+    if (!response.ok) {
+      throw new Error(
+        `GET /v2/satellites failed with status ${response.status}`
+      );
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return fromBinary(OMMListSchema, bytes).satellites.map(toSatelliteInfo);
+  } finally {
+    // An aborted request (for example, React remounting the app) isn't the real load.
+    if (!signal?.aborted) markSatellitesSettled();
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return fromBinary(OMMListSchema, bytes).satellites.map(toSatelliteInfo);
 }
