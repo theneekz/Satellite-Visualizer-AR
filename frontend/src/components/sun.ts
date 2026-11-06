@@ -22,11 +22,12 @@ const EARTH_TILT_CHANGE_PER_DAY_DEG = 0.0000004;
 
 /**
  * Unit vector from Earth toward the Sun at `epochMs` for lighting. Uses the
- * same axes as the satellites: X toward the March equinox and Z toward the
- * north pole.
+ * same axes as the satellites (TEME): X toward the March equinox and Z toward
+ * the north pole, both as they are on that date.
  *
- * Uses the Astronomical Almanac's low-precision solar position. The result
- * ignores precession (Earth's slow wobble) which shifts it by under a degree.
+ * Uses the Astronomical Almanac's low-precision solar position, accurate to
+ * about 0.01°. It measures from the equinox of date, like TEME, so precession
+ * (Earth's slow wobble) needs no correction.
  */
 export function sunDirection(epochMs: number): [number, number, number] {
   const days = daysSinceJ2000(epochMs);

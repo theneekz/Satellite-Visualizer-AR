@@ -9,11 +9,22 @@ import { EARTH_RADIUS_KM } from "../constants";
 export const SATELLITE_SIZE_PX = 12;
 // A click selects the nearest satellite within this many pixels.
 export const PICK_RADIUS_PX = 10;
+// The renderers never step a satellite further than this from its snapshot. Snapshots arrive
+// every second, so this only matters right after the computer wakes from sleep, when the clock
+// jumps ahead before a fresh snapshot arrives. Holding the satellites still for that moment beats
+// flying them off their orbits along a straight line.
+const MAX_EXTRAPOLATION_S = 5;
+
+/** Seconds from the snapshot at `snapshotTimeMs` to `nowMs`, clamped to MAX_EXTRAPOLATION_S. */
+export function extrapolationSeconds(nowMs: number, snapshotTimeMs: number) {
+  const dt = (nowMs - snapshotTimeMs) / 1000;
+  return Math.min(MAX_EXTRAPOLATION_S, Math.max(-MAX_EXTRAPOLATION_S, dt));
+}
 
 /**
  * Writes satellite `index`'s position `dt` seconds after the snapshot into `out`, in globe units
- * (Earth radius = 1). `data` holds each satellite's GCRS position and velocity (km, km/s). This is
- * the same straight-line step the vertex shaders compute. GCRS has Z as the polar axis and the
+ * (Earth radius = 1). `data` holds each satellite's TEME position and velocity (km, km/s). This is
+ * the same straight-line step the vertex shaders compute. TEME has Z as the polar axis and the
  * globe uses Y, so the axes are rotated (no mirroring).
  */
 export function scenePositionAt(

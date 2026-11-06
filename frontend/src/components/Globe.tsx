@@ -23,9 +23,15 @@ import {
   zoomForDistance,
 } from "./camera";
 import { createSatelliteRenderer } from "./satellite";
+import { TouchPoints } from "./touchPoints";
 import { earthRotationAngle } from "./earthRotation";
 import { sunDirection } from "./sun";
-import earthTextureUrl from "../assets/earth.jpg";
+import {
+  earthPreviewUrl,
+  loadEarthBitmap,
+  sharpEarthLoadTime,
+  sharpEarthUrl,
+} from "./earthTexture";
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
@@ -73,6 +79,67 @@ const SHADER_SOURCE = /* wgsl */ `
 `;
 
 /** Procedurally builds a UV-sphere: positions + normals + UVs interleaved, plus a triangle index list. */
+/**
+ * Uploads an Earth image into a new texture with a full mip chain, then closes the bitmap.
+ * WebGPU doesn't generate mipmaps, so each level is a half-size copy of the one above it,
+ * resized by the browser.
+ */
+function createEarthTexture(device: GPUDevice, bitmap: ImageBitmap) {
+  const { width, height } = bitmap;
+  const mipLevelCount = Math.floor(Math.log2(Math.max(width, height))) + 1;
+  const texture = device.createTexture({
+    size: [width, height],
+    format: "rgba8unorm",
+    mipLevelCount,
+    usage:
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.COPY_DST |
+      GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+  device.queue.copyExternalImageToTexture(
+    { source: bitmap },
+    { texture },
+    [width, height]
+  );
+  // Level 1 is the largest level drawn here; each later level fits inside its corner.
+  const canvas = new OffscreenCanvas(
+    Math.max(1, width >> 1),
+    Math.max(1, height >> 1)
+  );
+  const context = canvas.getContext("2d")!;
+  context.imageSmoothingQuality = "high";
+  let source: CanvasImageSource = bitmap;
+  let sourceWidth = width;
+  let sourceHeight = height;
+  for (let level = 1; level < mipLevelCount; level++) {
+    const levelWidth = Math.max(1, width >> level);
+    const levelHeight = Math.max(1, height >> level);
+    // Draws the previous level, shrunk by half, into the top-left corner of the canvas. When
+    // the source is the canvas itself, the browser copies it before drawing.
+    context.drawImage(
+      source,
+      0,
+      0,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      levelWidth,
+      levelHeight
+    );
+    device.queue.copyExternalImageToTexture(
+      { source: canvas },
+      { texture, mipLevel: level },
+      [levelWidth, levelHeight]
+    );
+    source = canvas;
+    sourceWidth = levelWidth;
+    sourceHeight = levelHeight;
+  }
+  bitmap.close();
+  return texture;
+}
+
 function buildSphere(radius: number, latBands: number, lonBands: number) {
   const vertices: number[] = [];
   for (let lat = 0; lat <= latBands; lat++) {
@@ -225,43 +292,40 @@ function Globe({
         },
       });
 
-      // Load the Earth texture: fetch the bundled image, decode it into a bitmap, and
-      // upload it into a GPUTexture via copyExternalImageToTexture.
-      const earthImageResponse = await fetch(earthTextureUrl);
-      const earthImageBlob = await earthImageResponse.blob();
-      const earthBitmap = await createImageBitmap(earthImageBlob);
-      if (cancelled) return;
-
-      const earthTexture = device.createTexture({
-        size: [earthBitmap.width, earthBitmap.height],
-        format: "rgba8unorm",
-        usage:
-          GPUTextureUsage.TEXTURE_BINDING |
-          GPUTextureUsage.COPY_DST |
-          GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      device.queue.copyExternalImageToTexture(
-        { source: earthBitmap },
-        { texture: earthTexture },
-        [earthBitmap.width, earthBitmap.height]
+      // Draw the first frames with the small preview image. The sharp image loads after the
+      // render loop starts (see below), so it never delays the first frame.
+      let earthTexture = createEarthTexture(
+        device,
+        await loadEarthBitmap(earthPreviewUrl)
       );
-      earthBitmap.close();
+      if (cancelled) {
+        earthTexture.destroy();
+        return;
+      }
 
+      // Trilinear filtering across the mipmaps keeps the globe from shimmering when it's small
+      // on screen. Anisotropic filtering keeps the texture sharp near the globe's edge, where
+      // it's seen at a steep angle.
       const earthSampler = device.createSampler({
         magFilter: "linear",
         minFilter: "linear",
+        mipmapFilter: "linear",
+        maxAnisotropy: 16,
         addressModeU: "repeat",
         addressModeV: "clamp-to-edge",
       });
 
-      const bindGroup = device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: uniformBuffer } },
-          { binding: 1, resource: earthTexture.createView() },
-          { binding: 2, resource: earthSampler },
-        ],
-      });
+      function createEarthBindGroup() {
+        return device.createBindGroup({
+          layout: pipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: uniformBuffer } },
+            { binding: 1, resource: earthTexture.createView() },
+            { binding: 2, resource: earthSampler },
+          ],
+        });
+      }
+      let bindGroup = createEarthBindGroup();
 
       const satellite = createSatelliteRenderer(device, format);
 
@@ -286,6 +350,9 @@ function Globe({
       let framing = false;
       let lastSelectedId: number | null = null;
       let dragging = false;
+      // True once a second finger lands during a gesture, so lifting the fingers isn't a tap.
+      let multiTouch = false;
+      const touches = new TouchPoints();
       let lastX = 0;
       let lastY = 0;
       let downX = 0;
@@ -324,15 +391,30 @@ function Globe({
       }
 
       function handlePointerDown(e: PointerEvent) {
+        touches.add(e);
+        canvas!.setPointerCapture(e.pointerId);
+        // A second finger starts a pinch, so it stops the drag and cancels any tap.
+        if (touches.size > 1) {
+          multiTouch = true;
+          dragging = false;
+          return;
+        }
         dragging = true;
         lastX = e.clientX;
         lastY = e.clientY;
         downX = e.clientX;
         downY = e.clientY;
-        canvas!.setPointerCapture(e.pointerId);
       }
 
       function handlePointerMove(e: PointerEvent) {
+        const pinch = touches.move(e);
+        if (pinch !== 1) {
+          framing = false;
+          zoomPercent = Math.min(
+            ZOOM_MAX_PERCENT,
+            Math.max(ZOOM_MIN_PERCENT, zoomPercent * pinch)
+          );
+        }
         if (!dragging) return;
         // Dragging the globe hands control back to the user.
         if (
@@ -348,20 +430,35 @@ function Globe({
         pitch += dy * DRAG_SENSITIVITY;
       }
 
-      function handlePointerCancel(e: PointerEvent) {
-        dragging = false;
+      // Lifts one finger. If one finger stays down, the drag picks up from its position.
+      function releasePointer(e: PointerEvent) {
+        touches.remove(e);
         canvas!.releasePointerCapture(e.pointerId);
-      }
-
-      function handlePointerUp(e: PointerEvent) {
-        handlePointerCancel(e);
-        if (
-          Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX
-        ) {
-          handleClick(e);
+        if (touches.size === 0) {
+          multiTouch = false;
+          dragging = false;
+        } else if (touches.size === 1) {
+          const remaining = touches.only()!;
+          lastX = remaining.x;
+          lastY = remaining.y;
+          dragging = true;
         }
       }
 
+      function handlePointerCancel(e: PointerEvent) {
+        releasePointer(e);
+      }
+
+      function handlePointerUp(e: PointerEvent) {
+        const isTap =
+          !multiTouch &&
+          Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX;
+        releasePointer(e);
+        if (isTap) handleClick(e);
+      }
+
+      // Stops the browser from scrolling or zooming the page, so the pointer events reach the globe.
+      canvas!.style.touchAction = "none";
       canvas!.addEventListener("pointerdown", handlePointerDown);
       canvas!.addEventListener("pointermove", handlePointerMove);
       canvas!.addEventListener("pointerup", handlePointerUp);
@@ -413,7 +510,7 @@ function Globe({
       function frame() {
         if (cancelled) return;
 
-        // Re-upload when a new poll arrives or the filter changes.
+        // Re-upload when a new snapshot arrives or the filter changes.
         const snapshot = positionsRef.current;
         const visible = visibleIdsRef.current;
         if (
@@ -428,8 +525,11 @@ function Globe({
 
         const now = performance.now();
         const frameDt = (now - lastFrameTime) / 1000;
-        satellite.step(frameDt);
         lastFrameTime = now;
+        // Read the wall clock every frame instead of adding up frame times. performance.now()
+        // stops while the computer sleeps, so a summed clock falls behind the snapshots (which
+        // use Date.now()) by the sleep's length and the satellites are drawn far off their orbits.
+        satellite.setTime(Date.now());
 
         // Selecting a satellite turns the camera so it is at the center of the screen, then
         // keeps it there as it orbits until the user drags. Zoom is left alone. Rotating the
@@ -478,7 +578,7 @@ function Globe({
         const view = translation(0, 0, -distance);
         const model = multiply(rotationX(pitch), rotationY(yaw));
         // Satellites live in the inertial frame, so they only get the camera rotation (`model`).
-        // The Earth mesh additionally spins by the Earth Rotation Angle for the current time.
+        // The Earth mesh additionally spins by Greenwich Mean Sidereal Time for the current time.
         const mvp = multiply(multiply(projection, view), model);
         lastMvp = mvp;
         lastModel = model;
@@ -490,7 +590,7 @@ function Globe({
         const earthMvp = multiply(multiply(projection, view), earthModel);
         mvpUniform.set(earthMvp, 0);
         mvpUniform.set(earthModel, 16);
-        // The Sun is inertial like the satellites: same GCRS -> world axis swap as the satellite
+        // The Sun is inertial like the satellites: same TEME -> world axis swap as the satellite
         // shader, then only the camera rotation (not the Earth's spin).
         const [sx, sy, sz] = sunDirection(satellite.simTime());
         const sunWorld = [sx, sz, -sy];
@@ -533,6 +633,24 @@ function Globe({
       }
 
       frameId = requestAnimationFrame(frame);
+
+      // Swap in the sharp image once it loads. If it fails, the globe keeps the preview.
+      sharpEarthLoadTime()
+        .then(() => loadEarthBitmap(sharpEarthUrl(false), "low"))
+        .then((bitmap) => {
+          if (cancelled) {
+            bitmap.close();
+            return;
+          }
+          // Frames already submitted finish with the old texture before it's freed.
+          const sharp = createEarthTexture(device, bitmap);
+          earthTexture.destroy();
+          earthTexture = sharp;
+          bindGroup = createEarthBindGroup();
+        })
+        .catch((err: unknown) => {
+          console.warn("Keeping the preview Earth image:", err);
+        });
 
       return () => {
         window.removeEventListener("resize", handleResize);

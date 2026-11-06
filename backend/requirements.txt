@@ -1,7 +1,4 @@
 fastapi
 uvicorn
-skyfield
-sgp4
-numpy
 protobuf
 psycopg[binary]

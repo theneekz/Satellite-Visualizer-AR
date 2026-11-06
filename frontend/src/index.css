@@ -12,8 +12,7 @@ body {
   text-align: center;
 }
 
-/* Renderer comparison controls, centered at the bottom between the list and the card. */
-.renderer-switch,
+/* The Three.js backend label, centered at the bottom between the list and the card. */
 .renderer-backend {
   position: fixed;
   bottom: 12px;
@@ -27,14 +26,10 @@ body {
   border-radius: 999px;
 }
 
-.renderer-switch {
-  text-decoration: none;
-}
-
 /* Enter VR / AR, above the backend label (only shown where the device supports them). */
 .xr-buttons {
   position: fixed;
-  bottom: 76px;
+  bottom: 44px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -52,9 +47,7 @@ body {
   cursor: pointer;
 }
 
-/* The active backend sits just above the switch. */
 .renderer-backend {
-  bottom: 44px;
   opacity: 0.7;
   pointer-events: none;
 }

@@ -122,7 +122,7 @@ function SatelliteCard({
   positionsRef: RefObject<PositionsSnapshot | null>;
   onClose: () => void;
 }) {
-  // Live values are recomputed once a second from the latest polled state.
+  // Live values are recomputed once a second from the latest snapshot.
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [live, setLive] = useState<LiveState | null>(null);
 

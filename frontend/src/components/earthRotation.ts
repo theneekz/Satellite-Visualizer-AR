@@ -1,29 +1,18 @@
-import { daysSinceJ2000 } from "../utilities";
+import { gstime } from "satellite.js";
 
 // The texture's prime meridian is off by a half-turn.
 const TEXTURE_OFFSET_IN_RADIANS = Math.PI;
-// The agreed upon ERA on J2000, in turns.
-const ERA_AT_J2000_TURNS = 0.779057273264;
-// The Earth turns slightly more than once per 24-hour day because it also
-// moves along its orbit.
-const ERA_TURNS_PER_DAY = 1.00273781191135448;
 
 /**
- * How far Earth has turned from the GCRS X axis at `epochMs`. Uses the IAU 2000
- * Earth Rotation Angle (ERA) to get approx. radians.
+ * How far Earth has turned from the TEME X axis at `epochMs`, in radians: Greenwich Mean Sidereal
+ * Time (GMST). SGP4's TEME frame is defined by this GMST model, so using satellite.js's keeps each
+ * satellite over the right ground. UTC stands in for UT1, which is less than a second off.
  */
-export function eraRadians(epochMs: number): number {
-  const turns =
-    ERA_AT_J2000_TURNS + ERA_TURNS_PER_DAY * daysSinceJ2000(epochMs);
-
-  //  Keep only the current turn.
-  const fraction = turns - Math.floor(turns);
-
-  // Converts to radians.
-  return 2 * Math.PI * fraction;
+export function gmstRadians(epochMs: number): number {
+  return gstime(new Date(epochMs));
 }
 
-/** Rotation to apply to the Earth mesh so it is oriented correctly in GCRS. */
+/** Rotation to apply to the Earth mesh so it is oriented correctly in TEME. */
 export function earthRotationAngle(epochMs: number): number {
-  return eraRadians(epochMs) + TEXTURE_OFFSET_IN_RADIANS;
+  return gmstRadians(epochMs) + TEXTURE_OFFSET_IN_RADIANS;
 }

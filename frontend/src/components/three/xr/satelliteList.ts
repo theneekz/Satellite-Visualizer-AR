@@ -15,7 +15,7 @@ import {
   FIRST_LAUNCH_YEAR,
   SEARCH_DEBOUNCE_MS,
 } from "../../../constants";
-import { sentenceCase } from "../../../format";
+import { formatCount, sentenceCase } from "../../../format";
 import { createCanvasLayer } from "./canvasLayer";
 import {
   CLOSE_SIZE,
@@ -520,10 +520,10 @@ export function createXRSatelliteList(
 
     // Header: the title with the count, as on the page, and the close button.
     const title = loading
-      ? "Satellites"
+      ? "Artificial Space Objects"
       : satellites.length === totalCount
-        ? `Satellites (${totalCount})`
-        : `Satellites (${satellites.length} of ${totalCount})`;
+        ? `Artificial Space Objects (${formatCount(totalCount)})`
+        : `Artificial Space Objects (${formatCount(satellites.length)} of ${formatCount(totalCount)})`;
     ctx.fillStyle = COLORS.text;
     drawText(
       ctx,

@@ -15,10 +15,60 @@
   border-right: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.satellite-list__title {
+/* The header doubles as the toggle that shows and hides the rest of the list. */
+.satellite-list__toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  width: 100%;
   margin: 0 0 12px;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.satellite-list__title {
   font-size: 1rem;
   font-weight: 600;
+}
+
+.satellite-list__icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.satellite-list__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.satellite-list__body[hidden] {
+  display: none;
+}
+
+/* Collapsed, the list shrinks to its header, so the globe stays visible. */
+.satellite-list.is-collapsed {
+  bottom: auto;
+  padding-bottom: 12px;
+}
+
+/* On phones the list spans the top of the screen instead of a side strip. */
+@media (max-width: 600px) {
+  .satellite-list {
+    right: 0;
+    bottom: auto;
+    width: auto;
+    max-height: 60vh;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
 }
 
 .satellite-list__message {

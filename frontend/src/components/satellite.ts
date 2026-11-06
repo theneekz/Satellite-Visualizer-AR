@@ -5,12 +5,10 @@ import {
 import { EARTH_RADIUS_KM } from "../constants";
 import {
   SATELLITE_SIZE_PX,
+  extrapolationSeconds,
   pickNearest,
   scenePositionAt,
 } from "./satelliteScene";
-
-// Demo only: real-time LEO motion is barely visible, so run the simulation faster.
-const TIME_SCALE = 1;
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
@@ -38,11 +36,11 @@ const SHADER_SOURCE = /* wgsl */ `
       vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
       vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
     );
-    // Straight-line step from the polled state (GCRS, km) to the current time.
-    let gcrs = position + velocity * uniforms.dt;
-    // GCRS has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
+    // Straight-line step from the snapshot's state (TEME, km) to the current time.
+    let teme = position + velocity * uniforms.dt;
+    // TEME has Z as the polar axis; the globe uses Y. This is a proper rotation (no mirroring),
     // then km are scaled so the Earth's radius is 1 like the globe mesh.
-    let world = vec3f(gcrs.x, gcrs.z, -gcrs.y) / ${EARTH_RADIUS_KM};
+    let world = vec3f(teme.x, teme.z, -teme.y) / ${EARTH_RADIUS_KM};
     let clip = uniforms.mvp * vec4f(world, 1.0);
     // The selected satellite is drawn twice as large.
     let isSelected = i32(instanceIndex) == uniforms.selectedIndex;
@@ -66,9 +64,9 @@ const SHADER_SOURCE = /* wgsl */ `
 
 /**
  * Draws every satellite in the latest snapshot as a small square in the same render pass as the
- * globe. Each satellite is one instance holding its polled position and velocity; the vertex
+ * globe. Each satellite is one instance holding its propagated position and velocity; the vertex
  * shader moves it in a straight line by the time elapsed since the snapshot. That is accurate to
- * a few km over the ~30 s between polls, and each new poll re-anchors it.
+ * a few km over the ~30 s between snapshots, and each new snapshot re-anchors it.
  */
 export function createSatelliteRenderer(
   device: GPUDevice,
@@ -199,7 +197,7 @@ export function createSatelliteRenderer(
   function scenePosition(id: number): [number, number, number] | null {
     const index = indexById.get(id);
     if (index === undefined) return null;
-    const dt = (simTimeMs - snapshotTimeMs) / 1000;
+    const dt = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     scenePositionAt(instanceData, index, dt, scratch);
     return [scratch[0], scratch[1], scratch[2]];
   }
@@ -228,7 +226,7 @@ export function createSatelliteRenderer(
     const best = pickNearest(
       instanceData,
       count,
-      (simTimeMs - snapshotTimeMs) / 1000,
+      extrapolationSeconds(simTimeMs, snapshotTimeMs),
       mvp,
       model,
       cameraDistance,
@@ -240,9 +238,9 @@ export function createSatelliteRenderer(
     return best === -1 ? null : ids[best];
   }
 
-  /** Advances the simulated clock by `dtSeconds` of wall-clock time (scaled by TIME_SCALE). */
-  function step(dtSeconds: number) {
-    simTimeMs += dtSeconds * TIME_SCALE * 1000;
+  /** Sets the time (Unix epoch milliseconds) the satellites are drawn at. */
+  function setTime(timeMs: number) {
+    simTimeMs = timeMs;
   }
 
   /** Uploads the camera transform and the time since the snapshot. `mvp` must include the globe's model rotation. */
@@ -255,7 +253,7 @@ export function createSatelliteRenderer(
     uniformData[16] = viewportWidth;
     uniformData[17] = viewportHeight;
     uniformData[18] = SATELLITE_SIZE_PX;
-    uniformData[19] = (simTimeMs - snapshotTimeMs) / 1000;
+    uniformData[19] = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     uniformInts[20] = selectedIndex;
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
   }
@@ -273,7 +271,7 @@ export function createSatelliteRenderer(
     setSelected,
     scenePosition,
     pick,
-    step,
+    setTime,
     update,
     draw,
     simTime: () => simTimeMs,
