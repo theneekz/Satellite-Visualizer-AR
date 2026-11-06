@@ -20,15 +20,21 @@ import {
 } from "./filters";
 import { usePropagatedPositions } from "./hooks/usePropagatedPositions";
 
-// ?renderer=three swaps in the Three.js globe to compare it with the hand-written WebGPU one, and
-// ?renderer=xr is that globe on WebGL with buttons to enter VR/AR on a headset. It is
+// The XR globe is the Three.js globe on WebGL with buttons to enter VR/AR. Headsets get it
+// automatically; elsewhere ?renderer=xr forces it (with the dev emulator) and ?renderer=three
+// shows the Three.js globe without XR, to compare it with the hand-written WebGPU one. It is
 // code-split, so the default page never downloads Three.js.
 const GlobeThree = lazy(() => import("./components/three/GlobeThree"));
 const RENDERER = new URLSearchParams(window.location.search).get("renderer");
-const USE_XR = RENDERER === "xr";
-const USE_THREE = RENDERER === "three" || USE_XR;
 
-function App() {
+interface AppProps {
+  // Whether this device can run an immersive VR session, as checked before the first render.
+  xrSupported: boolean;
+}
+
+function App({ xrSupported }: AppProps) {
+  const useXR = xrSupported || RENDERER === "xr";
+  const useThree = useXR || RENDERER === "three";
   const [satellites, setSatellites] = useState<SatelliteInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -99,7 +105,7 @@ function App() {
           />
         </SatelliteList>
       )}
-      {USE_THREE ? (
+      {useThree ? (
         <Suspense fallback={null}>
           <GlobeThree
             positionsRef={positionsRef}
@@ -116,7 +122,7 @@ function App() {
               onFiltersReset: resetFilters,
             }}
             onSelect={setSelectedId}
-            xr={USE_XR}
+            xr={useXR}
             onPresentingChange={setPresentingXR}
           />
         </Suspense>
@@ -128,10 +134,6 @@ function App() {
           onSelect={setSelectedId}
         />
       )}
-      {/* A full reload, so each renderer starts from a clean GPU context. */}
-      <a className="renderer-switch" href={USE_THREE ? "?" : "?renderer=three"}>
-        {USE_THREE ? "Use WebGPU renderer" : "Use Three.js renderer"}
-      </a>
       {selected && (
         <SatelliteCard
           satellite={selected}
