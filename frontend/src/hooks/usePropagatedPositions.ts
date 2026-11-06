@@ -56,6 +56,11 @@ export function usePropagatedPositions(satellites: SatelliteInfo[]) {
     document.addEventListener("visibilitychange", onVisibilityChange);
     worker.onerror = (event) => {
       console.error("Failed to propagate satellites:", event.message);
+      // A worker error means no reply is coming. Clear the in-flight flag and keep the loop
+      // going, or requestSnapshot() returns early forever and the snapshot goes stale.
+      inFlight = false;
+      if (!document.hidden)
+        timer = setTimeout(requestSnapshot, PROPAGATION_INTERVAL_MS);
     };
 
     const elements = packElements(satellites);
