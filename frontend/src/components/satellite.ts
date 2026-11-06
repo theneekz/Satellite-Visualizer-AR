@@ -5,12 +5,10 @@ import {
 import { EARTH_RADIUS_KM } from "../constants";
 import {
   SATELLITE_SIZE_PX,
+  extrapolationSeconds,
   pickNearest,
   scenePositionAt,
 } from "./satelliteScene";
-
-// Demo only: real-time LEO motion is barely visible, so run the simulation faster.
-const TIME_SCALE = 1;
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
@@ -199,7 +197,7 @@ export function createSatelliteRenderer(
   function scenePosition(id: number): [number, number, number] | null {
     const index = indexById.get(id);
     if (index === undefined) return null;
-    const dt = (simTimeMs - snapshotTimeMs) / 1000;
+    const dt = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     scenePositionAt(instanceData, index, dt, scratch);
     return [scratch[0], scratch[1], scratch[2]];
   }
@@ -228,7 +226,7 @@ export function createSatelliteRenderer(
     const best = pickNearest(
       instanceData,
       count,
-      (simTimeMs - snapshotTimeMs) / 1000,
+      extrapolationSeconds(simTimeMs, snapshotTimeMs),
       mvp,
       model,
       cameraDistance,
@@ -240,9 +238,9 @@ export function createSatelliteRenderer(
     return best === -1 ? null : ids[best];
   }
 
-  /** Advances the simulated clock by `dtSeconds` of wall-clock time (scaled by TIME_SCALE). */
-  function step(dtSeconds: number) {
-    simTimeMs += dtSeconds * TIME_SCALE * 1000;
+  /** Sets the time (Unix epoch milliseconds) the satellites are drawn at. */
+  function setTime(timeMs: number) {
+    simTimeMs = timeMs;
   }
 
   /** Uploads the camera transform and the time since the snapshot. `mvp` must include the globe's model rotation. */
@@ -255,7 +253,7 @@ export function createSatelliteRenderer(
     uniformData[16] = viewportWidth;
     uniformData[17] = viewportHeight;
     uniformData[18] = SATELLITE_SIZE_PX;
-    uniformData[19] = (simTimeMs - snapshotTimeMs) / 1000;
+    uniformData[19] = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     uniformInts[20] = selectedIndex;
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
   }
@@ -273,7 +271,7 @@ export function createSatelliteRenderer(
     setSelected,
     scenePosition,
     pick,
-    step,
+    setTime,
     update,
     draw,
     simTime: () => simTimeMs,

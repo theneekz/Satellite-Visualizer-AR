@@ -462,8 +462,11 @@ function Globe({
 
         const now = performance.now();
         const frameDt = (now - lastFrameTime) / 1000;
-        satellite.step(frameDt);
         lastFrameTime = now;
+        // Read the wall clock every frame instead of adding up frame times. performance.now()
+        // stops while the computer sleeps, so a summed clock falls behind the snapshots (which
+        // use Date.now()) by the sleep's length and the satellites are drawn far off their orbits.
+        satellite.setTime(Date.now());
 
         // Selecting a satellite turns the camera so it is at the center of the screen, then
         // keeps it there as it orbits until the user drags. Zoom is left alone. Rotating the
