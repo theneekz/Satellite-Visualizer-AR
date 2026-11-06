@@ -61,7 +61,7 @@ export const GRAB_GAP = 12;
 export const GRAB_WIDTH = 120;
 export const GRAB_HEIGHT = 8;
 export const GRAB_SLOP = 14;
-// How much a layer needs below its panel to fit the grab bar and its hit area.
+// How far below its panel the grab bar's hit area reaches.
 export const GRAB_SPACE = GRAB_GAP + GRAB_HEIGHT + GRAB_SLOP;
 
 // Space between a panel's edge and its contents.
@@ -193,23 +193,16 @@ export function isOnCloseButton(
 }
 
 /**
- * Draws the grab bar on its own canvas, `GRAB_SPACE` tall, whose top is the panel's bottom edge
- * and `panelWidth` wide. It brightens under a ray or while dragged, but keeps its length.
+ * Draws the grab bar's pill filling its own canvas, `GRAB_WIDTH` by `GRAB_HEIGHT`. It brightens
+ * under a ray or while dragged, but keeps its length.
  */
 export function drawGrabBar(
   ctx: CanvasRenderingContext2D,
-  panelWidth: number,
   highlighted: boolean
 ) {
   ctx.fillStyle = highlighted ? COLORS.grabActive : COLORS.grab;
   ctx.beginPath();
-  ctx.roundRect(
-    (panelWidth - GRAB_WIDTH) / 2,
-    GRAB_GAP,
-    GRAB_WIDTH,
-    GRAB_HEIGHT,
-    GRAB_HEIGHT / 2
-  );
+  ctx.roundRect(0, 0, GRAB_WIDTH, GRAB_HEIGHT, GRAB_HEIGHT / 2);
   ctx.fill();
 }
 

@@ -36,9 +36,11 @@ import {
 // Layout, in layout pixels. The page's card is one 300px column; in the room the four sections
 // sit in a 2x2 grid instead, so the card stays within a comfortable field of view.
 const WIDTH = 520;
-// The layer's size is fixed when it is created, so it fits the tallest card (badges on two rows).
-// A shorter card leaves the rest transparent. The grab bar has its own layer below this one.
-const MAX_HEIGHT = 448;
+// The layer's size is fixed when it is created, so every card is drawn this tall: enough for the
+// tallest card (badges on two rows). A shorter card leaves empty space at its bottom rather than
+// a transparent area, which would punch a hole through the scene. The grab bar has its own layer
+// below this one.
+const HEIGHT = 448;
 const COLUMN_GAP = 24;
 const COLUMN_WIDTH = (WIDTH - 2 * PADDING - COLUMN_GAP) / 2;
 const METRIC_GAP_X = 12;
@@ -48,7 +50,6 @@ const METRIC_HEIGHT = (TEXT_SIZE + VALUE_SIZE) * LINE_HEIGHT;
 const SECTION_GAP = 12;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
-const LAYER_HEIGHT = MAX_HEIGHT;
 
 export type CardRegion = "close" | "grab" | "card";
 
@@ -66,12 +67,10 @@ export function createXRSatelliteCard(
   let nowMs = Date.now();
   let closeHovered = false;
   let grabHighlighted = false;
-  // The drawn card's height, which varies with how the badges wrap; set by each draw.
-  let height = MAX_HEIGHT;
 
   const layer = createCanvasLayer(renderer, {
     width: WIDTH,
-    height: LAYER_HEIGHT,
+    height: HEIGHT,
     pixelRatio: PIXEL_RATIO,
     metersPerPixel: METERS_PER_PIXEL,
     position,
@@ -81,6 +80,7 @@ export function createXRSatelliteCard(
   // Under the card, moving with it since it is a child of the card's object.
   const grabBar = createGrabBar(renderer, WIDTH);
   layer.object.add(grabBar.object);
+  grabBar.placeBelow(HEIGHT, HEIGHT);
 
   function drawMetric(
     ctx: CanvasRenderingContext2D,
@@ -160,8 +160,8 @@ export function createXRSatelliteCard(
     if (!satellite) return;
     const details = satelliteDetails(satellite, live, nowMs);
 
-    // Lay out the badges first: how they wrap sets the card's height, and the background is
-    // drawn before everything else.
+    // Lay out the badges first: how they wrap sets where the sections start. The card's height
+    // is always HEIGHT, so a card whose badges fit on one row has empty space at its bottom.
     const badgeRows: { text: string; tone: "type" | "plain"; x: number }[][] = [
       [],
     ];
@@ -185,15 +185,10 @@ export function createXRSatelliteCard(
     // The sections sit in a 2x2 grid, each row as tall as its taller section.
     const [a, b, c, d] = details.sections;
     const firstRowHeight = Math.max(sectionHeight(a), sectionHeight(b));
-    const secondRowHeight = Math.max(sectionHeight(c), sectionHeight(d));
-    height = Math.min(
-      MAX_HEIGHT,
-      sectionsTop + firstRowHeight + SECTION_GAP + secondRowHeight + PADDING
-    );
 
     ctx.fillStyle = COLORS.background;
     ctx.beginPath();
-    ctx.roundRect(0.5, 0.5, WIDTH - 1, height - 1, 12);
+    ctx.roundRect(0.5, 0.5, WIDTH - 1, HEIGHT - 1, 12);
     ctx.fill();
     ctx.strokeStyle = COLORS.border;
     ctx.lineWidth = 1;
@@ -256,10 +251,8 @@ export function createXRSatelliteCard(
     layer.invalidate();
   }
 
-  /** Redraws what changed, then moves the grab bar under the card's drawn height. */
   function update() {
     layer.update();
-    grabBar.placeBelow(height, LAYER_HEIGHT);
     grabBar.update();
   }
 
@@ -273,8 +266,7 @@ export function createXRSatelliteCard(
 
   /**
    * What the ray points at on the card, with the point it meets in `object`'s space and the
-   * distance to it; null if it misses the card and its grab bar, including the transparent space
-   * below a short card.
+   * distance to it; null if it misses the card and its grab bar.
    */
   function hitTest(
     raycaster: Raycaster
@@ -291,8 +283,6 @@ export function createXRSatelliteCard(
     }
     if (!hit) return null;
     const { x, y, local, distance } = hit;
-    // Below a short card the layer is transparent, which is not part of the card.
-    if (y > height) return null;
     const onClose = isOnCloseButton(x, y, CLOSE_X, CLOSE_Y);
     return { region: onClose ? "close" : "card", local, distance };
   }
