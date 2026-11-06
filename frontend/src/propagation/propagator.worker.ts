@@ -71,7 +71,14 @@ function propagateAll(timeMs: number): PropagatorResponse {
   let n = 0;
   for (let i = 0; i < satrecs.length; i++) {
     // null when SGP4 fails, for example when an orbit has decayed.
-    const result = propagate(satrecs[i], date);
+    // Catch per satellite: if the worker throws, the main thread never gets a reply, so one
+    // bad orbit would stall every snapshot.
+    let result;
+    try {
+      result = propagate(satrecs[i], date);
+    } catch {
+      continue;
+    }
     if (!result) continue;
     const { position, velocity } = result;
     if (!isFiniteVector(position) || !isFiniteVector(velocity)) continue;
