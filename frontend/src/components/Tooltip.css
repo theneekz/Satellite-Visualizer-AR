@@ -1,0 +1,29 @@
+.tooltip-trigger {
+  cursor: help;
+}
+
+.tooltip-trigger:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  /* Starts at the origin so an unpositioned bubble can't widen the page while it's measured. */
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  max-width: 240px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: left;
+  color: #fff;
+  background: rgba(10, 12, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  /* Keeps the bubble from intercepting the pointer and flickering when it overlaps its trigger. */
+  pointer-events: none;
+}
