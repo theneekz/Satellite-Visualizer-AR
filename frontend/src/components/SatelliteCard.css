@@ -163,3 +163,10 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+
+/* On phones the card stops above the bottom navigation bar (see SidePanel.css). */
+@media (max-width: 600px) {
+  .satellite-card {
+    bottom: 60px;
+  }
+}

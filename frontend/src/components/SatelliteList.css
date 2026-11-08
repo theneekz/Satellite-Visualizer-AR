@@ -3,8 +3,6 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .satellite-list__title {
@@ -13,6 +11,7 @@
   align-items: baseline;
   gap: 8px;
   margin: 0 0 10px;
+  font-family: var(--panel-font-display);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -41,18 +40,6 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-/* On phones the whole panel scrolls, so the rows get a fixed height of their own. */
-@media (max-width: 600px) {
-  .satellite-list {
-    flex: none;
-  }
-
-  .satellite-list__items {
-    flex: none;
-    height: 50dvh;
-  }
 }
 
 .satellite-list__rows {
@@ -113,6 +100,7 @@
 
 .satellite-list__id {
   flex-shrink: 0;
+  font-family: var(--panel-font-display);
   font-size: 0.75rem;
   opacity: 0.5;
   font-variant-numeric: tabular-nums;

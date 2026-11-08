@@ -51,3 +51,14 @@ body {
   opacity: 0.7;
   pointer-events: none;
 }
+
+/* On phones these sit above the bottom navigation bar (see SidePanel.css). */
+@media (max-width: 600px) {
+  .renderer-backend {
+    bottom: 72px;
+  }
+
+  .xr-buttons {
+    bottom: 104px;
+  }
+}

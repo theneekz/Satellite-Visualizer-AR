@@ -2,48 +2,39 @@
   --panel-accent: #85b7eb;
   --panel-muted: rgba(255, 255, 255, 0.6);
   --panel-line: rgba(255, 255, 255, 0.08);
+  --panel-background: rgba(10, 12, 24, 0.72);
+  /* Section titles, counts, and catalog IDs use the display face; everything else the text face. */
+  --panel-font-display: Oxanium, system-ui, sans-serif;
 
-  position: fixed;
-  top: 12px;
-  bottom: 12px;
-  left: 12px;
-  width: 300px;
-  box-sizing: border-box;
-  padding: 16px 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  font-family: "Exo 2", system-ui, sans-serif;
   text-align: left;
   color: #fff;
-  background: rgba(10, 12, 24, 0.62);
+}
+
+.side-panel__rail {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 72px;
+  box-sizing: border-box;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 12, 24, 0.88);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-}
-
-/* Collapsed, the panel shrinks to its header, so the globe stays visible. */
-.side-panel.is-collapsed {
-  bottom: auto;
-  padding-bottom: 16px;
-}
-
-.side-panel__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
+  border-right: 1px solid var(--panel-line);
 }
 
 .side-panel__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 1.05rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  margin: 0;
+  display: grid;
+  place-items: center;
+  height: 36px;
+  margin: 0 0 6px;
+  font-size: 1rem;
 }
 
 .side-panel__logo {
@@ -53,30 +44,116 @@
   color: var(--panel-accent);
 }
 
-.side-panel__toggle {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  color: inherit;
+.side-panel__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.side-panel__destination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 60px;
+  padding: 7px 0 6px;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--panel-muted);
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
-  opacity: 0.8;
+  transition: background-color 0.15s;
 }
 
-.side-panel__toggle svg {
+.side-panel__destination:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* The highlight covers the icon and its label, so each destination reads as a tab. */
+.side-panel__destination.is-active {
+  color: #b5d4f4;
+  background: rgba(133, 183, 235, 0.24);
+}
+
+.side-panel__icon {
+  display: grid;
+  place-items: center;
+}
+
+.side-panel__icon svg {
   fill: none;
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.6;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.side-panel__toggle:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+.side-panel__drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 72px;
+  width: 280px;
+  box-sizing: border-box;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-background);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-right: 1px solid var(--panel-line);
+}
+
+.side-panel__drawer[hidden],
+.side-panel__section[hidden] {
+  display: none;
+}
+
+.side-panel__section--objects {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.side-panel__title {
+  margin: 0 0 10px;
+  font-family: var(--panel-font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--panel-muted);
+}
+
+.side-panel__site-title {
+  margin: 0 0 8px;
+  font-family: var(--panel-font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--panel-accent);
+}
+
+.side-panel__intro {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.side-panel__note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--panel-muted);
 }
 
 .side-panel a {
@@ -93,68 +170,10 @@
   outline-offset: 2px;
 }
 
-.side-panel__body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
-}
-
-.side-panel__body[hidden] {
-  display: none;
-}
-
-.side-panel__intro p {
-  margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.side-panel__intro .side-panel__byline {
-  margin-top: 8px;
-  font-size: 0.75rem;
-  color: var(--panel-muted);
-}
-
-.side-panel__vr {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: linear-gradient(
-    135deg,
-    rgba(133, 183, 235, 0.14),
-    rgba(133, 183, 235, 0.04)
-  );
-  border: 1px solid rgba(133, 183, 235, 0.22);
-  border-radius: 12px;
-}
-
-.side-panel__vr-icon {
-  flex-shrink: 0;
-  fill: none;
-  stroke: var(--panel-accent);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-}
-
-.side-panel__vr-text {
-  min-width: 0;
-}
-
-.side-panel__vr p {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--panel-muted);
-}
-
 .side-panel__vr-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .side-panel__vr-actions button {
@@ -179,73 +198,48 @@
   cursor: not-allowed;
 }
 
-/* About and VR & AR fold down to a one-line heading to leave more room for the list. */
-.side-panel__section {
-  flex-shrink: 0;
-}
-
-.side-panel__section summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 2px 0;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--panel-muted);
-  list-style: none;
-  cursor: pointer;
-  user-select: none;
-}
-
-.side-panel__section summary::-webkit-details-marker {
-  display: none;
-}
-
-.side-panel__section summary:hover {
-  color: #fff;
-}
-
-/* A chevron that points down when open and right when closed. */
-.side-panel__section summary::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  margin-right: 4px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform 0.15s;
-}
-
-.side-panel__section:not([open]) summary::after {
-  transform: rotate(-45deg);
-}
-
-.side-panel__section[open] summary {
-  margin-bottom: 8px;
-}
-
-/* On phones the panel spans the top of the screen. When open, its body scrolls as a whole so
-   the intro can scroll away and leave room for the list. */
+/* On phones the rail becomes a bottom bar and the drawer a sheet above it. The 60px bar height
+   is repeated in index.css and SatelliteCard.css, which keep their content clear of the bar. */
 @media (max-width: 600px) {
-  .side-panel {
-    top: 8px;
-    right: 8px;
-    bottom: auto;
-    left: 8px;
+  .side-panel__rail {
+    top: auto;
+    right: 0;
     width: auto;
-    max-height: calc(100dvh - 16px);
-    padding: 12px 12px 8px;
-    gap: 12px;
+    height: 60px;
+    padding: 0;
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 0;
+    border-top: 1px solid var(--panel-line);
+    border-right: 0;
   }
 
-  .side-panel.is-collapsed {
-    padding-bottom: 12px;
+  /* A logo would take space from the three destinations. */
+  .side-panel__brand {
+    position: absolute;
+    visibility: hidden;
   }
 
-  .side-panel__body {
-    overflow-y: auto;
+  .side-panel__destination {
+    width: 96px;
+    padding: 5px 0 4px;
+  }
+
+  .side-panel__drawer {
+    top: auto;
+    right: 0;
+    bottom: 60px;
+    left: 0;
+    width: auto;
+    padding: 16px 16px 12px;
+    border-top: 1px solid var(--panel-line);
+    border-right: 0;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* The list fills its parent's height, so the sheet needs a definite one for this section. */
+  .side-panel__section--objects {
+    flex: none;
+    height: 60dvh;
   }
 }
