@@ -11,7 +11,11 @@ import Globe from "./components/Globe";
 import SatelliteCard from "./components/SatelliteCard";
 import SatelliteFilterBar from "./components/SatelliteFilterBar";
 import SatelliteList from "./components/SatelliteList";
-import SidePanel, { type XRControls } from "./components/SidePanel";
+import SidePanel, {
+  type PanelSection,
+  type XRControls,
+} from "./components/SidePanel";
+import { PHONE_QUERY } from "./constants";
 import {
   DEFAULT_FILTERS,
   filterSatellites,
@@ -42,6 +46,10 @@ function App({ xrSupported }: AppProps) {
   const [filters, setFilters] = useState<SatelliteFilters>(DEFAULT_FILTERS);
   // While an XR session runs, the headset shows its own list, so the page's isn't mounted.
   const [presentingXR, setPresentingXR] = useState(false);
+  // The open navigation section, or null when the drawer is closed.
+  const [panelSection, setPanelSection] = useState<PanelSection | null>(
+    "about"
+  );
   // How to enter VR or AR, once the XR globe knows which modes this device supports.
   const [xrControls, setXRControls] = useState<XRControls | null>(null);
   const handleXRModes = useCallback(
@@ -93,18 +101,28 @@ function App({ xrSupported }: AppProps) {
     [satellites]
   );
 
+  function selectFromList(id: number) {
+    setSelectedId(id);
+    // On phones the sheet covers the satellite card, so make way for the card.
+    if (window.matchMedia(PHONE_QUERY).matches) setPanelSection(null);
+  }
+
   const selected = satellites.find((s) => s.id === selectedId) ?? null;
 
   return (
     <main>
       {!presentingXR && (
-        <SidePanel xr={xrControls}>
+        <SidePanel
+          xr={xrControls}
+          active={panelSection}
+          onActiveChange={setPanelSection}
+        >
           <SatelliteList
             satellites={filtered}
             totalCount={satellites.length}
             loading={loading}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={selectFromList}
           >
             <SatelliteFilterBar
               filters={filters}
