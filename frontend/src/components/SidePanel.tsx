@@ -82,8 +82,8 @@ function SidePanel({
           aria-labelledby="side-panel-about-title"
           hidden={active !== "about"}
         >
-          <h2 id="side-panel-about-title" className="side-panel__title">
-            About
+          <h2 id="side-panel-about-title" className="side-panel__site-title">
+            SatViz
           </h2>
           <p className="side-panel__intro">
             Explore every artificial object orbiting Earth, live, on the web or

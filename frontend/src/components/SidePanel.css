@@ -139,6 +139,15 @@
   color: var(--panel-muted);
 }
 
+.side-panel__site-title {
+  margin: 0 0 8px;
+  font-family: var(--panel-font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--panel-accent);
+}
+
 .side-panel__intro {
   margin: 0 0 10px;
   font-size: 0.8rem;
