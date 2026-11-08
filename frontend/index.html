@@ -9,6 +9,13 @@
       content="Explore satellites and other objects orbiting Earth in real time on an interactive 3D globe, on Meta Quest, mobile or web."
     />
     <title>SatViz</title>
+    <!-- The navigation's fonts. swap shows fallback text at once instead of waiting on them. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600&family=Oxanium:wght@500;600&display=swap"
+    />
     <!-- Starts the satellite data download before any JavaScript runs. getSatellites() in
          src/api/satellites.ts reuses this response, so its fetch must stay a plain same-origin
          GET with no custom headers, which is what crossorigin="anonymous" matches. -->
