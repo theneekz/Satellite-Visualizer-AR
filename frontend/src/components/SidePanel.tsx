@@ -60,7 +60,7 @@ function SidePanel({
             aria-controls={`side-panel-${id}`}
             onClick={() => onActiveChange(active === id ? null : id)}
           >
-            <span className="side-panel__indicator">{icon}</span>
+            <span className="side-panel__icon">{icon}</span>
             {label}
           </button>
         ))}

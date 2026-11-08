@@ -58,47 +58,41 @@
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  width: 100%;
-  padding: 0;
+  width: 60px;
+  padding: 7px 0 6px;
   font: inherit;
   font-size: 0.62rem;
   font-weight: 500;
   color: var(--panel-muted);
   background: transparent;
   border: 0;
+  border-radius: 12px;
   cursor: pointer;
-}
-
-.side-panel__destination:hover,
-.side-panel__destination.is-active {
-  color: #fff;
-}
-
-/* The pill behind the icon marks the open section. */
-.side-panel__indicator {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 30px;
-  border-radius: 999px;
   transition: background-color 0.15s;
 }
 
-.side-panel__indicator svg {
+.side-panel__destination:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* The highlight covers the icon and its label, so each destination reads as a tab. */
+.side-panel__destination.is-active {
+  color: #b5d4f4;
+  background: rgba(133, 183, 235, 0.24);
+}
+
+.side-panel__icon {
+  display: grid;
+  place-items: center;
+}
+
+.side-panel__icon svg {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.side-panel__destination:hover .side-panel__indicator {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.side-panel__destination.is-active .side-panel__indicator {
-  color: #b5d4f4;
-  background: rgba(133, 183, 235, 0.24);
 }
 
 .side-panel__drawer {
@@ -226,8 +220,9 @@
     visibility: hidden;
   }
 
-  .side-panel__indicator {
-    height: 26px;
+  .side-panel__destination {
+    width: 96px;
+    padding: 5px 0 4px;
   }
 
   .side-panel__drawer {
@@ -236,7 +231,7 @@
     bottom: 60px;
     left: 0;
     width: auto;
-    padding: 14px 12px 8px;
+    padding: 16px 16px 12px;
     border-top: 1px solid var(--panel-line);
     border-right: 0;
     border-radius: 16px 16px 0 0;
