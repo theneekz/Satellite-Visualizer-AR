@@ -55,10 +55,10 @@ body {
 /* On phones these sit above the bottom navigation bar (see SidePanel.css). */
 @media (max-width: 600px) {
   .renderer-backend {
-    bottom: 72px;
+    bottom: 60px;
   }
 
   .xr-buttons {
-    bottom: 104px;
+    bottom: 92px;
   }
 }
