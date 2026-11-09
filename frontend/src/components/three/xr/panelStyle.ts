@@ -124,6 +124,35 @@ export function drawText(
   return size * LINE_HEIGHT;
 }
 
+/**
+ * Splits `text` into lines no wider than `maxWidth`. Past `maxLines`, the last line holds all the
+ * remaining text, so drawing it with drawText cuts it short with an ellipsis.
+ */
+export function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  size: number,
+  maxWidth: number,
+  maxLines: number
+) {
+  ctx.font = font(size);
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const [i, word] of words.entries()) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (!line || ctx.measureText(candidate).width <= maxWidth) {
+      line = candidate;
+    } else if (lines.length === maxLines - 1) {
+      return [...lines, [line, ...words.slice(i)].join(" ")];
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  return [...lines, line];
+}
+
 export function badgeWidth(ctx: CanvasRenderingContext2D, text: string) {
   ctx.font = font(TEXT_SIZE);
   return ctx.measureText(text).width + 2 * BADGE_PADDING_X;

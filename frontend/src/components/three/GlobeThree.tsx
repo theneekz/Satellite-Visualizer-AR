@@ -647,7 +647,9 @@ function GlobeThree({
           0
         );
         object.quaternion.setFromEuler(panelFacing);
-        panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
+        panelGrabOffset
+          .copy(panelDrag.local)
+          .applyQuaternion(object.quaternion);
         object.position.subVectors(panelGrabPoint, panelGrabOffset);
       }
     }
@@ -781,7 +783,7 @@ function GlobeThree({
      * Keeps the card showing the selected satellite with its live position refreshed once a
      * second and the list showing the latest satellites and selection, cuts each controller's ray
      * short where it meets a panel, and highlights what the rays point at: rows, close buttons,
-     * and grab bars, and a grab bar while dragged.
+     * and grab bars, and a grab bar while dragged. The card also explains what a ray points at.
      */
     function updateXRPanels() {
       if (!card || !list) return;
@@ -811,6 +813,7 @@ function GlobeThree({
         card.refresh(positionsRef.current, now);
       }
       let cardCloseHovered = false;
+      let cardHelp: string | null = null;
       let cardGrabHighlighted = panelDrag?.object === card.object;
       let listHovered: string | null = null;
       let listGrabHighlighted = panelDrag?.object === list.object;
@@ -825,12 +828,14 @@ function GlobeThree({
         if (hit?.panel === "card") {
           if (hit.region === "close") cardCloseHovered = true;
           if (hit.region === "grab") cardGrabHighlighted = true;
+          cardHelp ??= hit.help;
         } else if (hit?.panel === "list") {
           if (hit.region === "grab") listGrabHighlighted = true;
           else listHovered ??= hit.key;
         }
       }
       card.setCloseHovered(cardCloseHovered);
+      card.setPointedHelp(cardHelp);
       card.setGrabHighlighted(cardGrabHighlighted);
       card.update();
       list.setHover(listHovered, listGrabHighlighted);
