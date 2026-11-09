@@ -92,10 +92,13 @@ function propagatePath(
   if (satrec) {
     // satrec.no is the mean motion in radians per minute.
     const stepMs = ((2 * Math.PI) / satrec.no / ORBIT_PATH_SEGMENTS) * 60_000;
+    // Sample on a fixed grid of times, so points that two refreshes share land in exactly the same
+    // place and the line doesn't shift when it is replaced.
+    const firstStep = Math.floor(startMs / stepMs);
     for (let segment = 0; segment <= ORBIT_PATH_SEGMENTS; segment++) {
       let result;
       try {
-        result = propagate(satrec, new Date(startMs + segment * stepMs));
+        result = propagate(satrec, new Date((firstStep + segment) * stepMs));
       } catch {
         break;
       }
