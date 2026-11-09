@@ -25,6 +25,7 @@ import {
 import { createSatelliteRenderer } from "./satellite";
 import { TouchPoints } from "./touchPoints";
 import { earthRotationAngle } from "./earthRotation";
+import { EARTH_NIGHT_BRIGHTNESS } from "../constants";
 import { sunDirection } from "./sun";
 import {
   earthPreviewUrl,
@@ -71,8 +72,7 @@ const SHADER_SOURCE = /* wgsl */ `
     // Soft terminator: blends from the night side into daylight across a narrow band.
     let daylight = smoothstep(-0.1, 0.15, sunAlignment);
     let dayShade = 0.35 + 0.65 * max(sunAlignment, 0.0);
-    // The night side is dimmed but stays clearly readable so the surface can still be made out.
-    let brightness = mix(0.8, dayShade, daylight);
+    let brightness = mix(${EARTH_NIGHT_BRIGHTNESS}, dayShade, daylight);
     let texColor = textureSample(earthTexture, earthSampler, input.uv);
     return vec4f(texColor.rgb * brightness, 1.0);
   }
