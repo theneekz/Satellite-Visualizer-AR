@@ -287,7 +287,7 @@ function GlobeThree({
     const satellites = createSatellites();
     inertial.add(satellites.mesh);
     const orbitPath = createOrbitPath();
-    inertial.add(orbitPath.line);
+    inertial.add(orbitPath.mesh);
     let earth: ReturnType<typeof createEarth> | null = null;
     let map: Texture | null = null;
 
@@ -943,6 +943,7 @@ function GlobeThree({
       satellites.setAngularSizing(inXR);
       renderer.getDrawingBufferSize(drawingBufferSize);
       satellites.update(simTimeMs, drawingBufferSize.x, drawingBufferSize.y);
+      orbitPath.update(drawingBufferSize.x, drawingBufferSize.y, inXR);
       if (inXR) {
         handleButtons();
         handleThumbsticks(Math.min(frameDt, 0.1));

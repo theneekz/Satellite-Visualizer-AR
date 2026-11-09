@@ -616,7 +616,7 @@ function Globe({
         }
         device.queue.writeBuffer(uniformBuffer, 0, mvpUniform);
         satellite.update(mvp, canvas!.width, canvas!.height);
-        orbitPath.update(mvp);
+        orbitPath.update(mvp, canvas!.width, canvas!.height);
 
         const encoder = device.createCommandEncoder();
         const pass = encoder.beginRenderPass({

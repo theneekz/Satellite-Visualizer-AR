@@ -40,7 +40,7 @@ Clicking picks the nearest visible satellite on the CPU (projected distance plus
 
 `?renderer=three` swaps in `components/three/GlobeThree`, a Three.js port with the same props and behavior (camera, follow, picking, Sun lighting, instanced satellites), so the two can be compared on the same data. It is lazy-loaded, so the default page never downloads Three.js (about 250KB gzipped). It uses `WebGPURenderer`, which runs on WebGPU when available and falls back to WebGL 2 otherwise; the active backend is shown on screen. Shaders are written in TSL (Three's shading language), which compiles to WGSL or GLSL, and that is what makes the fallback possible. Its render loop uses `setAnimationLoop`, the hook a WebXR session drives, as groundwork for a VR mode.
 
-While a satellite is selected, both renderers draw its next revolution as a line in the inertial frame. The propagation worker samples SGP4 at 1,440 evenly spaced times across one orbital period and refreshes the line every 10 seconds, so its start stays with the satellite.
+While a satellite is selected, both renderers draw its next revolution as a line in the inertial frame. The propagation worker samples SGP4 at 1,440 evenly spaced times across one orbital period and refreshes the line every 60 seconds. Samples sit on a fixed time grid, so a refresh doesn't move the points it shares with the previous line. GPU lines are always 1 pixel wide, so each segment is an instanced screen-facing strip, sized in pixels on screen and by angle in XR.
 
 ### React UI Layer
 

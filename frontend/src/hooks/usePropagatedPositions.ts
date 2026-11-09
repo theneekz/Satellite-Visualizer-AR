@@ -14,9 +14,9 @@ import type {
 // from its true orbit over this interval. A pass over the catalog takes ~50 ms in the
 // worker on desktop, so this leaves it idle most of the time.
 const PROPAGATION_INTERVAL_MS = 1000;
-// The orbit path starts where the satellite was when it was computed, so it trails the satellite
-// by at most this long. The path barely changes between refreshes.
-const ORBIT_PATH_REFRESH_MS = 10_000;
+// A path covers a full revolution, so the satellite stays on the line between refreshes. Refreshes
+// only need to follow the orbit's slow drift.
+const ORBIT_PATH_REFRESH_MS = 60_000;
 
 /**
  * Propagates every satellite in a worker every PROPAGATION_INTERVAL_MS and keeps the latest

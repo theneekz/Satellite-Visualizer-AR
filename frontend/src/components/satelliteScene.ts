@@ -11,6 +11,22 @@ export const SATELLITE_SIZE_PX = 12;
 export const PICK_RADIUS_PX = 10;
 // The selected satellite's highlight color, so its orbit reads as part of the selection.
 export const ORBIT_PATH_COLOR = [0.52, 0.72, 0.92] as const;
+export const ORBIT_PATH_WIDTH_PX = 3;
+// Each drawn segment holds its start and end points (x, y, z each).
+export const FLOATS_PER_ORBIT_SEGMENT = 6;
+
+/**
+ * Writes the segments joining consecutive x, y, z triples in `points` into `out`, and returns how
+ * many there are. A path with fewer than two points has none.
+ */
+export function writeOrbitSegments(points: Float32Array, out: Float32Array) {
+  const segmentCount = Math.max(0, points.length / 3 - 1);
+  for (let i = 0; i < segmentCount; i++) {
+    out.set(points.subarray(i * 3, i * 3 + 6), i * FLOATS_PER_ORBIT_SEGMENT);
+  }
+  return segmentCount;
+}
+
 // The renderers never step a satellite further than this from its snapshot. Snapshots arrive
 // every second, so this only matters right after the computer wakes from sleep, when the clock
 // jumps ahead before a fresh snapshot arrives. Holding the satellites still for that moment beats
