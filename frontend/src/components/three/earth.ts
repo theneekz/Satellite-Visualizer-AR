@@ -15,6 +15,7 @@ import {
   texture,
   uniform,
 } from "three/tsl";
+import { EARTH_NIGHT_BRIGHTNESS } from "../../constants";
 
 /**
  * The textured Earth, lit by the Sun with a soft terminator and a dim night side (the same
@@ -29,8 +30,7 @@ export function createEarth(map: Texture) {
   // Soft terminator: blends from the night side into daylight across a narrow band.
   const daylight = smoothstep(-0.1, 0.15, sunAlignment);
   const dayShade = float(0.35).add(max(sunAlignment, 0).mul(0.65));
-  // The night side is dimmed but stays clearly readable.
-  const brightness = mix(float(0.4), dayShade, daylight);
+  const brightness = mix(float(EARTH_NIGHT_BRIGHTNESS), dayShade, daylight);
 
   const mapNode = texture(map);
   const material = new MeshBasicNodeMaterial();
