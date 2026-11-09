@@ -40,6 +40,8 @@ Clicking picks the nearest visible satellite on the CPU (projected distance plus
 
 `?renderer=three` swaps in `components/three/GlobeThree`, a Three.js port with the same props and behavior (camera, follow, picking, Sun lighting, instanced satellites), so the two can be compared on the same data. It is lazy-loaded, so the default page never downloads Three.js (about 250KB gzipped). It uses `WebGPURenderer`, which runs on WebGPU when available and falls back to WebGL 2 otherwise; the active backend is shown on screen. Shaders are written in TSL (Three's shading language), which compiles to WGSL or GLSL, and that is what makes the fallback possible. Its render loop uses `setAnimationLoop`, the hook a WebXR session drives, as groundwork for a VR mode.
 
+While a satellite is selected, both renderers draw its next revolution as a line in the inertial frame. The propagation worker samples SGP4 at 1,440 evenly spaced times across one orbital period and refreshes the line every 10 seconds, so its start stays with the satellite.
+
 ### React UI Layer
 
 - SatelliteList: virtualized with @tanstack/react-virtual using fixed 34px rows, so only about 40 rows are in the DOM regardless of list size. Selection scrolls by index.
@@ -136,4 +138,4 @@ Skyfield can compute a precise Sun position but needs a JPL ephemeris file (abou
 
 ## Future Work
 
-Element set history (dated payloads in R2), satcat join for country and launch data, orbit path rendering and pass predictions (both possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.
+Element set history (dated payloads in R2), satcat join for country and launch data, pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.

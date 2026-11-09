@@ -22,10 +22,15 @@ import {
   type Event,
   Texture,
 } from "three/webgpu";
-import type { PositionsSnapshot, SatelliteInfo } from "../../api/satellites";
+import type {
+  OrbitPath,
+  PositionsSnapshot,
+  SatelliteInfo,
+} from "../../api/satellites";
 import { gmstRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
+import { createOrbitPath } from "./orbitPath";
 import { createSatellites } from "./satellites";
 import { TouchPoints } from "../touchPoints";
 import {
@@ -156,6 +161,7 @@ export interface XRListProps {
  *   ├─ stage  (identity on screen; places and scales the globe in the room in XR)
  *   │  └─ inertial  (rotated by the camera's yaw/pitch; TEME with Y as the polar axis)
  *   │     ├─ satellites  (positions computed in the vertex shader)
+ *   │     ├─ orbit path  (the selected satellite's next revolution)
  *   │     └─ earth       (additionally spun about Y by Greenwich Mean Sidereal Time)
  *   ├─ card  (XR only; the satellite card's layer plane, or its mesh without layers)
  *   ├─ list  (XR only; the satellite list, likewise)
@@ -189,6 +195,7 @@ async function loadDecodedTexture(url: string) {
 
 function GlobeThree({
   positionsRef,
+  orbitPathRef,
   visibleIds,
   selectedId,
   selectedSatellite,
@@ -199,6 +206,8 @@ function GlobeThree({
   xr = false,
 }: {
   positionsRef: RefObject<PositionsSnapshot | null>;
+  // The selected satellite's upcoming orbit.
+  orbitPathRef: RefObject<OrbitPath | null>;
   // Only these satellites are drawn; null means all of them.
   visibleIds: Set<number> | null;
   selectedId: number | null;
@@ -277,6 +286,8 @@ function GlobeThree({
 
     const satellites = createSatellites();
     inertial.add(satellites.mesh);
+    const orbitPath = createOrbitPath();
+    inertial.add(orbitPath.line);
     let earth: ReturnType<typeof createEarth> | null = null;
     let map: Texture | null = null;
 
@@ -914,6 +925,15 @@ function GlobeThree({
         satellites.setPositions(snapshot, visible);
       }
       satellites.setSelected(selectedIdRef.current);
+      // A filtered-out satellite isn't drawn, so its orbit isn't either.
+      const path = orbitPathRef.current;
+      orbitPath.setPath(
+        path &&
+          path.id === selectedIdRef.current &&
+          satellites.scenePosition(path.id)
+          ? path
+          : null
+      );
       const inXR = renderer.xr.isPresenting;
       satellites.setAngularSizing(inXR);
       renderer.getDrawingBufferSize(drawingBufferSize);
@@ -1112,6 +1132,7 @@ function GlobeThree({
       canvas.removeEventListener("pointercancel", handlePointerCancel);
       canvas.removeEventListener("wheel", handleWheel);
       satellites.dispose();
+      orbitPath.dispose();
       card?.dispose();
       list?.dispose();
       earth?.dispose();
@@ -1119,7 +1140,7 @@ function GlobeThree({
       renderer.dispose();
       canvas.remove();
     };
-  }, [positionsRef, xr]);
+  }, [positionsRef, orbitPathRef, xr]);
 
   if (error) {
     return <p>Renderer unavailable: {error}</p>;

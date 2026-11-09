@@ -6,7 +6,7 @@ import {
   rotationY,
   translation,
 } from "./mat4";
-import type { PositionsSnapshot } from "../api/satellites";
+import type { OrbitPath, PositionsSnapshot } from "../api/satellites";
 import {
   CLICK_MAX_MOVE_PX,
   DRAG_SENSITIVITY,
@@ -22,6 +22,7 @@ import {
   wrapAngle,
   zoomForDistance,
 } from "./camera";
+import { createOrbitPathRenderer } from "./orbitPath";
 import { createSatelliteRenderer } from "./satellite";
 import { TouchPoints } from "./touchPoints";
 import { earthRotationAngle } from "./earthRotation";
@@ -182,11 +183,14 @@ function buildSphere(radius: number, latBands: number, lonBands: number) {
 
 function Globe({
   positionsRef,
+  orbitPathRef,
   visibleIds,
   selectedId,
   onSelect,
 }: {
   positionsRef: RefObject<PositionsSnapshot | null>;
+  // The selected satellite's upcoming orbit.
+  orbitPathRef: RefObject<OrbitPath | null>;
   // Only these satellites are drawn; null means all of them.
   visibleIds: Set<number> | null;
   selectedId: number | null;
@@ -328,6 +332,7 @@ function Globe({
       let bindGroup = createEarthBindGroup();
 
       const satellite = createSatelliteRenderer(device, format);
+      const orbitPath = createOrbitPathRenderer(device, format);
 
       let depthTexture = device.createTexture({
         size: [canvas!.width, canvas!.height],
@@ -522,6 +527,15 @@ function Globe({
           satellite.setPositions(snapshot, visible);
         }
         satellite.setSelected(selectedIdRef.current);
+        // A filtered-out satellite isn't drawn, so its orbit isn't either.
+        const path = orbitPathRef.current;
+        orbitPath.setPath(
+          path &&
+            path.id === selectedIdRef.current &&
+            satellite.scenePosition(path.id)
+            ? path
+            : null
+        );
 
         const now = performance.now();
         const frameDt = (now - lastFrameTime) / 1000;
@@ -602,6 +616,7 @@ function Globe({
         }
         device.queue.writeBuffer(uniformBuffer, 0, mvpUniform);
         satellite.update(mvp, canvas!.width, canvas!.height);
+        orbitPath.update(mvp);
 
         const encoder = device.createCommandEncoder();
         const pass = encoder.beginRenderPass({
@@ -625,6 +640,7 @@ function Globe({
         pass.setVertexBuffer(0, vertexBuffer);
         pass.setIndexBuffer(indexBuffer, "uint16");
         pass.drawIndexed(indices.length);
+        orbitPath.draw(pass);
         satellite.draw(pass);
         pass.end();
         device.queue.submit([encoder.finish()]);
