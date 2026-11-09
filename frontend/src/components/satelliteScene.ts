@@ -9,6 +9,19 @@ import { EARTH_RADIUS_KM } from "../constants";
 export const SATELLITE_SIZE_PX = 12;
 // A click selects the nearest satellite within this many pixels.
 export const PICK_RADIUS_PX = 10;
+// The selected satellite's highlight color, so its orbit reads as part of the selection.
+export const ORBIT_PATH_COLOR = [0.52, 0.72, 0.92] as const;
+// The renderers never step a satellite further than this from its snapshot. Snapshots arrive
+// every second, so this only matters right after the computer wakes from sleep, when the clock
+// jumps ahead before a fresh snapshot arrives. Holding the satellites still for that moment beats
+// flying them off their orbits along a straight line.
+const MAX_EXTRAPOLATION_S = 5;
+
+/** Seconds from the snapshot at `snapshotTimeMs` to `nowMs`, clamped to MAX_EXTRAPOLATION_S. */
+export function extrapolationSeconds(nowMs: number, snapshotTimeMs: number) {
+  const dt = (nowMs - snapshotTimeMs) / 1000;
+  return Math.min(MAX_EXTRAPOLATION_S, Math.max(-MAX_EXTRAPOLATION_S, dt));
+}
 
 /**
  * Writes satellite `index`'s position `dt` seconds after the snapshot into `out`, in globe units

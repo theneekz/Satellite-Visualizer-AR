@@ -8,12 +8,13 @@ import {
   Mesh,
   MeshBasicNodeMaterial,
   Vector2,
+  Vector3,
   type Matrix4,
-  type Vector3,
 } from "three/webgpu";
 import {
   attribute,
   cameraProjectionMatrix,
+  dot,
   float,
   instanceIndex,
   modelViewMatrix,
@@ -29,13 +30,15 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../../api/satellites";
-import { EARTH_RADIUS_KM } from "../../constants";
+import { EARTH_RADIUS_KM, SATELLITE_SHADOW_BRIGHTNESS } from "../../constants";
 import {
   SATELLITE_SIZE_PX,
   pickNearest,
+  extrapolationSeconds,
   scenePositionAt,
   segmentHitsGlobe,
 } from "../satelliteScene";
+import { sunDirection } from "../sun";
 
 // In XR, satellites are sized by angle rather than pixels: this is the square's full width, about
 // what SATELLITE_SIZE_PX spans on a desktop screen.
@@ -62,6 +65,8 @@ export function createSatellites() {
   const selectedIndex = uniform(-1);
   // 1 to size satellites by angle (XR), 0 to size them in pixels.
   const angularSizing = uniform(0);
+  // Unit vector toward the Sun in TEME axes, like the satellite positions.
+  const sunDirTeme = uniform(new Vector3(1, 0, 0));
 
   const isSelected = instanceIndex.toFloat().equal(selectedIndex);
   const teme = attribute("satPosition", "vec3").add(
@@ -91,12 +96,23 @@ export function createSatellites() {
     pixelOffset
   ).mul(clip.w);
 
+  // Treats the Earth's shadow as a cylinder directly behind it, with a radius of 1 Earth radius.
+  const unitPosition = teme.div(EARTH_RADIUS_KM);
+  const alongSun = dot(unitPosition, sunDirTeme);
+  const offAxisSquared = dot(unitPosition, unitPosition).sub(
+    alongSun.mul(alongSun)
+  );
+  const inShadow = alongSun.lessThan(0).and(offAxisSquared.lessThan(1));
+  const shade = varying(
+    select(inShadow, float(SATELLITE_SHADOW_BRIGHTNESS), float(1))
+  );
+
   const material = new MeshBasicNodeMaterial({ side: DoubleSide });
   material.vertexNode = vec4(clip.xy.add(offset), clip.z, clip.w);
   material.colorNode = select(
     varying(select(isSelected, float(1), float(0))).greaterThan(0.5),
     vec3(0.52, 0.72, 0.92),
-    vec3(1, 0.85, 0.2)
+    vec3(1, 0.85, 0.2).mul(shade)
   );
 
   let capacity = 0;
@@ -203,8 +219,9 @@ export function createSatellites() {
     viewportWidth: number,
     viewportHeight: number
   ) {
-    dt.value = (simTimeMs - snapshotTimeMs) / 1000;
+    dt.value = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     viewport.value.set(viewportWidth, viewportHeight);
+    sunDirTeme.value.set(...sunDirection(simTimeMs));
   }
 
   /** The drawn position (inertial group space, Earth radius = 1) of instance `index`, into `out`. */

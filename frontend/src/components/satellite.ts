@@ -2,15 +2,14 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../api/satellites";
-import { EARTH_RADIUS_KM } from "../constants";
+import { EARTH_RADIUS_KM, SATELLITE_SHADOW_BRIGHTNESS } from "../constants";
 import {
   SATELLITE_SIZE_PX,
+  extrapolationSeconds,
   pickNearest,
   scenePositionAt,
 } from "./satelliteScene";
-
-// Demo only: real-time LEO motion is barely visible, so run the simulation faster.
-const TIME_SCALE = 1;
+import { sunDirection } from "./sun";
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
@@ -19,12 +18,15 @@ const SHADER_SOURCE = /* wgsl */ `
     sizePx: f32,
     dt: f32,
     selectedIndex: i32,
+    // Unit vector toward the Sun in TEME axes, like the satellite positions.
+    sunDirTeme: vec3f,
   }
   @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
   struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) @interpolate(flat) selected: f32,
+    @location(1) @interpolate(flat) shade: f32,
   }
 
   @vertex
@@ -53,12 +55,18 @@ const SHADER_SOURCE = /* wgsl */ `
     var out: VertexOutput;
     out.position = vec4f(clip.xy + offset, clip.z, clip.w);
     out.selected = select(0.0, 1.0, isSelected);
+    // Treats the Earth's shadow as a cylinder directly behind it, with a radius of 1 Earth radius.
+    let unitPosition = teme / ${EARTH_RADIUS_KM};
+    let alongSun = dot(unitPosition, uniforms.sunDirTeme);
+    let offAxisSquared = dot(unitPosition, unitPosition) - alongSun * alongSun;
+    let inShadow = alongSun < 0.0 && offAxisSquared < 1.0;
+    out.shade = select(1.0, ${SATELLITE_SHADOW_BRIGHTNESS}, inShadow);
     return out;
   }
 
   @fragment
   fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let base = vec4f(1.0, 0.85, 0.2, 1.0);
+    let base = vec4f(vec3f(1.0, 0.85, 0.2) * in.shade, 1.0);
     let highlight = vec4f(0.52, 0.72, 0.92, 1.0);
     return select(base, highlight, in.selected > 0.5);
   }
@@ -90,12 +98,13 @@ export function createSatelliteRenderer(
   let simTimeMs = Date.now();
 
   // mat4x4f (64) + vec2f viewport (8) + f32 sizePx (4) + f32 dt (4) + i32 selectedIndex (4),
-  // padded to 96. The Int32Array shares memory with the Float32Array for the integer field.
+  // padded to 96 because vec3f aligns to 16 bytes, then vec3f sunDirTeme (12), padded to 112. The
+  // Int32Array shares memory with the Float32Array for the integer field.
   const uniformBuffer = device.createBuffer({
-    size: 96,
+    size: 112,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
-  const uniformData = new Float32Array(24);
+  const uniformData = new Float32Array(28);
   const uniformInts = new Int32Array(uniformData.buffer);
 
   const shaderModule = device.createShaderModule({ code: SHADER_SOURCE });
@@ -199,7 +208,7 @@ export function createSatelliteRenderer(
   function scenePosition(id: number): [number, number, number] | null {
     const index = indexById.get(id);
     if (index === undefined) return null;
-    const dt = (simTimeMs - snapshotTimeMs) / 1000;
+    const dt = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     scenePositionAt(instanceData, index, dt, scratch);
     return [scratch[0], scratch[1], scratch[2]];
   }
@@ -228,7 +237,7 @@ export function createSatelliteRenderer(
     const best = pickNearest(
       instanceData,
       count,
-      (simTimeMs - snapshotTimeMs) / 1000,
+      extrapolationSeconds(simTimeMs, snapshotTimeMs),
       mvp,
       model,
       cameraDistance,
@@ -240,9 +249,9 @@ export function createSatelliteRenderer(
     return best === -1 ? null : ids[best];
   }
 
-  /** Advances the simulated clock by `dtSeconds` of wall-clock time (scaled by TIME_SCALE). */
-  function step(dtSeconds: number) {
-    simTimeMs += dtSeconds * TIME_SCALE * 1000;
+  /** Sets the time (Unix epoch milliseconds) the satellites are drawn at. */
+  function setTime(timeMs: number) {
+    simTimeMs = timeMs;
   }
 
   /** Uploads the camera transform and the time since the snapshot. `mvp` must include the globe's model rotation. */
@@ -255,8 +264,9 @@ export function createSatelliteRenderer(
     uniformData[16] = viewportWidth;
     uniformData[17] = viewportHeight;
     uniformData[18] = SATELLITE_SIZE_PX;
-    uniformData[19] = (simTimeMs - snapshotTimeMs) / 1000;
+    uniformData[19] = extrapolationSeconds(simTimeMs, snapshotTimeMs);
     uniformInts[20] = selectedIndex;
+    uniformData.set(sunDirection(simTimeMs), 24);
     device.queue.writeBuffer(uniformBuffer, 0, uniformData);
   }
 
@@ -273,7 +283,7 @@ export function createSatelliteRenderer(
     setSelected,
     scenePosition,
     pick,
-    step,
+    setTime,
     update,
     draw,
     simTime: () => simTimeMs,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { SatelliteInfo } from "../api/satellites";
+import { formatCount } from "../format";
 import "./SatelliteList.css";
 
 // Must match .satellite-list__item's height in SatelliteList.css.
@@ -23,6 +24,50 @@ function SatelliteList({
   // Search and filter controls, shown above the rows.
   children?: ReactNode;
 }) {
+  return (
+    <section
+      className="satellite-list"
+      aria-labelledby="satellite-list-title"
+      aria-busy={loading}
+    >
+      <h2 id="satellite-list-title" className="satellite-list__title">
+        Artificial space objects
+        {!loading && (
+          <span className="satellite-list__count">
+            {satellites.length === totalCount
+              ? formatCount(totalCount)
+              : `${formatCount(satellites.length)} of ${formatCount(totalCount)}`}
+          </span>
+        )}
+      </h2>
+      <ListBody
+        satellites={satellites}
+        totalCount={totalCount}
+        loading={loading}
+        selectedId={selectedId}
+        onSelect={onSelect}
+      >
+        {children}
+      </ListBody>
+    </section>
+  );
+}
+
+function ListBody({
+  satellites,
+  totalCount,
+  loading,
+  selectedId,
+  onSelect,
+  children,
+}: {
+  satellites: SatelliteInfo[];
+  totalCount: number;
+  loading: boolean;
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  children?: ReactNode;
+}) {
   // Only the rows in (or near) view are rendered, so the DOM stays small for any list size.
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -41,24 +86,17 @@ function SatelliteList({
   }, [selectedId, satellites, virtualizer]);
 
   return (
-    <nav className="satellite-list" aria-label="Satellites" aria-busy={loading}>
-      <h2 className="satellite-list__title">
-        {loading
-          ? "Satellites"
-          : satellites.length === totalCount
-            ? `Satellites (${totalCount})`
-            : `Satellites (${satellites.length} of ${totalCount})`}
-      </h2>
+    <>
       {children}
       {loading ? (
         <p className="satellite-list__message" role="status">
-          Loading satellites...
+          Loading Artificial Space Objects...
         </p>
       ) : satellites.length === 0 ? (
         <p className="satellite-list__message">
           {totalCount > 0
-            ? "No satellites match your filters."
-            : "No satellites found."}
+            ? "No Artificial Space Objects match your filters."
+            : "No Artificial Space Objects found."}
         </p>
       ) : (
         <div className="satellite-list__items" ref={scrollRef}>
@@ -94,7 +132,7 @@ function SatelliteList({
           </ul>
         </div>
       )}
-    </nav>
+    </>
   );
 }
 

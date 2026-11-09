@@ -48,6 +48,20 @@ export interface PositionsSnapshot {
   indexById: Map<number, number>;
 }
 
+// Segments in one drawn revolution, evenly spaced in time. Satellites sweep fastest at perigee, so
+// this is high enough to keep eccentric orbits smooth there.
+export const ORBIT_PATH_SEGMENTS = 1440;
+export const ORBIT_PATH_MAX_POINTS = ORBIT_PATH_SEGMENTS + 1;
+
+/**
+ * A satellite's next revolution. `points` holds x, y, z triples in globe units (Earth radius = 1,
+ * inertial, Y as the polar axis). It ends early if SGP4 fails partway, for example on a decay.
+ */
+export interface OrbitPath {
+  id: number;
+  points: Float32Array<ArrayBuffer>;
+}
+
 /** The TEME state of the satellite at `index` in a snapshot. */
 export function positionAt(
   snapshot: PositionsSnapshot,
@@ -93,13 +107,34 @@ function toSatelliteInfo(omm: OMM): SatelliteInfo {
   };
 }
 
+let markSatellitesSettled: () => void;
+/**
+ * Resolves once the first satellite request finishes, whether or not it succeeds. Large
+ * downloads that can wait, like the sharp Earth image, wait for this so they don't compete with
+ * the satellite data.
+ */
+export const satellitesSettled = new Promise<void>((resolve) => {
+  markSatellitesSettled = resolve;
+});
+
+/**
+ * Fetches the satellite catalog. Keep this a plain GET with no custom headers so it reuses the
+ * response that index.html preloads.
+ */
 export async function getSatellites(
   signal?: AbortSignal
 ): Promise<SatelliteInfo[]> {
-  const response = await fetch(SATELLITES_URL, { signal });
-  if (!response.ok) {
-    throw new Error(`GET /v2/satellites failed with status ${response.status}`);
+  try {
+    const response = await fetch(SATELLITES_URL, { signal });
+    if (!response.ok) {
+      throw new Error(
+        `GET /v2/satellites failed with status ${response.status}`
+      );
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return fromBinary(OMMListSchema, bytes).satellites.map(toSatelliteInfo);
+  } finally {
+    // An aborted request (for example, React remounting the app) isn't the real load.
+    if (!signal?.aborted) markSatellitesSettled();
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return fromBinary(OMMListSchema, bytes).satellites.map(toSatelliteInfo);
 }

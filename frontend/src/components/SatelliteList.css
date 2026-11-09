@@ -1,24 +1,30 @@
 .satellite-list {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 260px;
-  box-sizing: border-box;
-  padding: 16px;
   display: flex;
   flex-direction: column;
-  text-align: left;
-  color: #fff;
-  background: rgba(10, 12, 24, 0.55);
-  backdrop-filter: blur(6px);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  flex: 1;
+  min-height: 0;
 }
 
 .satellite-list__title {
-  margin: 0 0 12px;
-  font-size: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: var(--panel-font-display);
+  font-size: 0.7rem;
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.satellite-list__count {
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
 .satellite-list__message {
@@ -32,6 +38,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .satellite-list__rows {
@@ -65,8 +73,7 @@
   text-align: left;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -75,8 +82,8 @@
 }
 
 .satellite-list__item.is-selected {
-  background: rgba(133, 183, 235, 0.16);
-  border-bottom-color: rgba(133, 183, 235, 0.4);
+  background: rgba(133, 183, 235, 0.18);
+  box-shadow: inset 2px 0 0 #85b7eb;
 }
 
 .satellite-list__item:focus-visible {
@@ -93,6 +100,8 @@
 
 .satellite-list__id {
   flex-shrink: 0;
-  opacity: 0.6;
+  font-family: var(--panel-font-display);
+  font-size: 0.75rem;
+  opacity: 0.5;
   font-variant-numeric: tabular-nums;
 }

@@ -20,13 +20,19 @@ import {
   Vector3,
   WebGPURenderer,
   type Event,
-  type Texture,
+  Texture,
 } from "three/webgpu";
-import type { PositionsSnapshot, SatelliteInfo } from "../../api/satellites";
+import type {
+  OrbitPath,
+  PositionsSnapshot,
+  SatelliteInfo,
+} from "../../api/satellites";
 import { gmstRadians } from "../earthRotation";
 import { sunDirection } from "../sun";
 import { createEarth } from "./earth";
+import { createOrbitPath } from "./orbitPath";
 import { createSatellites } from "./satellites";
+import { TouchPoints } from "../touchPoints";
 import {
   createXRSatelliteCard,
   type XRSatelliteCard,
@@ -52,7 +58,11 @@ import {
   wrapAngle,
   zoomForDistance,
 } from "../camera";
-import earthTextureUrl from "../../assets/earth.jpg";
+import {
+  earthPreviewUrl,
+  sharpEarthLoadTime,
+  sharpEarthUrl,
+} from "../earthTexture";
 
 // XR: the globe floats in front of a standing user at eye height (meters, in the local-floor
 // reference space, where -Z is forward), with the Earth's radius XR_BASE_RADIUS_M at zoom 100%.
@@ -151,22 +161,53 @@ export interface XRListProps {
  *   ├─ stage  (identity on screen; places and scales the globe in the room in XR)
  *   │  └─ inertial  (rotated by the camera's yaw/pitch; TEME with Y as the polar axis)
  *   │     ├─ satellites  (positions computed in the vertex shader)
+ *   │     ├─ orbit path  (the selected satellite's next revolution)
  *   │     └─ earth       (additionally spun about Y by Greenwich Mean Sidereal Time)
  *   ├─ card  (XR only; the satellite card's layer plane, or its mesh without layers)
  *   ├─ list  (XR only; the satellite list, likewise)
  *   └─ controllers  (XR only; posed by the headset)
  */
+/**
+ * Sets up an Earth image for the globe. Three.js generates its mipmaps. Anisotropic filtering
+ * keeps it sharp near the globe's edge, where it's seen at a steep angle.
+ */
+function configureEarthMap(map: Texture) {
+  map.colorSpace = NoColorSpace;
+  map.wrapS = RepeatWrapping;
+  map.wrapT = ClampToEdgeWrapping;
+  map.anisotropy = 16;
+  return map;
+}
+
+/**
+ * Loads an image into a texture after the browser decodes it off the main thread.
+ * TextureLoader leaves decoding to the first upload, which stalls a frame on a large image.
+ */
+async function loadDecodedTexture(url: string) {
+  const image = new Image();
+  image.fetchPriority = "low";
+  image.src = url;
+  await image.decode();
+  const texture = new Texture(image);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function GlobeThree({
   positionsRef,
+  orbitPathRef,
   visibleIds,
   selectedId,
   selectedSatellite,
   xrList,
   onPresentingChange,
+  onXRModesChange,
   onSelect,
   xr = false,
 }: {
   positionsRef: RefObject<PositionsSnapshot | null>;
+  // The selected satellite's upcoming orbit.
+  orbitPathRef: RefObject<OrbitPath | null>;
   // Only these satellites are drawn; null means all of them.
   visibleIds: Set<number> | null;
   selectedId: number | null;
@@ -179,6 +220,13 @@ function GlobeThree({
   xr?: boolean;
   // Told when an XR session starts and ends, so the page can unmount what the headset can't show.
   onPresentingChange?: (presenting: boolean) => void;
+  // Told which immersive modes this device supports, with a function that enters one. The page
+  // shows its own Enter VR / AR buttons; start() must be called straight from their click
+  // handler, since the browser only grants a session in response to a user gesture.
+  onXRModesChange?: (
+    modes: XRSessionMode[],
+    start: (mode: XRSessionMode) => void
+  ) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [backend, setBackend] = useState<string | null>(null);
@@ -209,6 +257,10 @@ function GlobeThree({
   }, [presenting, onPresentingChange]);
 
   useEffect(() => {
+    onXRModesChange?.(xrModes, (mode) => startXRRef.current?.(mode));
+  }, [xrModes, onXRModesChange]);
+
+  useEffect(() => {
     const container = containerRef.current!;
     let disposed = false;
 
@@ -234,6 +286,8 @@ function GlobeThree({
 
     const satellites = createSatellites();
     inertial.add(satellites.mesh);
+    const orbitPath = createOrbitPath();
+    inertial.add(orbitPath.line);
     let earth: ReturnType<typeof createEarth> | null = null;
     let map: Texture | null = null;
 
@@ -259,6 +313,9 @@ function GlobeThree({
     let framing = false;
     let lastSelectedId: number | null = null;
     let dragging = false;
+    // True once a second finger lands during a gesture, so lifting the fingers isn't a tap.
+    let multiTouch = false;
+    const touches = new TouchPoints();
     let lastX = 0;
     let lastY = 0;
     let downX = 0;
@@ -296,13 +353,28 @@ function GlobeThree({
     }
 
     function handlePointerDown(e: PointerEvent) {
+      touches.add(e);
+      canvas.setPointerCapture(e.pointerId);
+      // A second finger starts a pinch, so it stops the drag and cancels any tap.
+      if (touches.size > 1) {
+        multiTouch = true;
+        dragging = false;
+        return;
+      }
       dragging = true;
       lastX = downX = e.clientX;
       lastY = downY = e.clientY;
-      canvas.setPointerCapture(e.pointerId);
     }
 
     function handlePointerMove(e: PointerEvent) {
+      const pinch = touches.move(e);
+      if (pinch !== 1) {
+        framing = false;
+        zoomPercent = Math.min(
+          ZOOM_MAX_PERCENT,
+          Math.max(ZOOM_MIN_PERCENT, zoomPercent * pinch)
+        );
+      }
       if (!dragging) return;
       // Dragging the globe hands control back to the user.
       if (
@@ -316,19 +388,35 @@ function GlobeThree({
       lastY = e.clientY;
     }
 
-    function handlePointerCancel(e: PointerEvent) {
-      dragging = false;
+    // Lifts one finger. If one finger stays down, the drag picks up from its position.
+    function releasePointer(e: PointerEvent) {
+      touches.remove(e);
       canvas.releasePointerCapture(e.pointerId);
+      if (touches.size === 0) {
+        multiTouch = false;
+        dragging = false;
+      } else if (touches.size === 1) {
+        const remaining = touches.only()!;
+        lastX = remaining.x;
+        lastY = remaining.y;
+        dragging = true;
+      }
+    }
+
+    function handlePointerCancel(e: PointerEvent) {
+      releasePointer(e);
     }
 
     function handlePointerUp(e: PointerEvent) {
-      handlePointerCancel(e);
-      if (
-        Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX
-      ) {
-        handleClick(e);
-      }
+      const isTap =
+        !multiTouch &&
+        Math.hypot(e.clientX - downX, e.clientY - downY) < CLICK_MAX_MOVE_PX;
+      releasePointer(e);
+      if (isTap) handleClick(e);
     }
+
+    // Stops the browser from scrolling or zooming the page, so the pointer events reach the globe.
+    canvas.style.touchAction = "none";
 
     function handleWheel(e: WheelEvent) {
       e.preventDefault();
@@ -552,21 +640,29 @@ function GlobeThree({
     function handlePanelDrag() {
       if (!panelDrag) return;
       pointOnRay(panelDrag.controller, panelDrag.distance, panelGrabPoint);
-      // The camera holds the headset's pose from the last frame.
-      const dx = camera.position.x - panelGrabPoint.x;
-      const dy = camera.position.y - panelGrabPoint.y;
-      const dz = camera.position.z - panelGrabPoint.z;
-      // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
-      // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
-      panelFacing.set(
-        -Math.atan2(dy, Math.hypot(dx, dz)),
-        Math.atan2(dx, dz),
-        0
-      );
       const { object } = panelDrag;
-      object.quaternion.setFromEuler(panelFacing);
-      panelGrabOffset.copy(panelDrag.local).applyQuaternion(object.quaternion);
-      object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      // The panel aims from its center, not the grab point. The grab bar sits below the center, so
+      // aiming from the grab point tilts the panel off the head, most for the tall list. The
+      // center depends on the facing too, so two passes settle both; the offset is small next to
+      // the distance, so the second pass is nearly exact.
+      for (let pass = 0; pass < 2; pass++) {
+        // The camera holds the headset's pose from the last frame.
+        const dx = camera.position.x - object.position.x;
+        const dy = camera.position.y - object.position.y;
+        const dz = camera.position.z - object.position.z;
+        // Yaw about the vertical, then pitch about the panel's level horizontal axis (Euler YXZ),
+        // so its front (+Z) points at the head. Pitching about X by a turns +Z to (0, -sin a, cos a).
+        panelFacing.set(
+          -Math.atan2(dy, Math.hypot(dx, dz)),
+          Math.atan2(dx, dz),
+          0
+        );
+        object.quaternion.setFromEuler(panelFacing);
+        panelGrabOffset
+          .copy(panelDrag.local)
+          .applyQuaternion(object.quaternion);
+        object.position.subVectors(panelGrabPoint, panelGrabOffset);
+      }
     }
 
     /** The satellite the controller's ray points at, or null. */
@@ -698,7 +794,7 @@ function GlobeThree({
      * Keeps the card showing the selected satellite with its live position refreshed once a
      * second and the list showing the latest satellites and selection, cuts each controller's ray
      * short where it meets a panel, and highlights what the rays point at: rows, close buttons,
-     * and grab bars, and a grab bar while dragged.
+     * and grab bars, and a grab bar while dragged. The card also explains what a ray points at.
      */
     function updateXRPanels() {
       if (!card || !list) return;
@@ -728,6 +824,7 @@ function GlobeThree({
         card.refresh(positionsRef.current, now);
       }
       let cardCloseHovered = false;
+      let cardHelp: string | null = null;
       let cardGrabHighlighted = panelDrag?.object === card.object;
       let listHovered: string | null = null;
       let listGrabHighlighted = panelDrag?.object === list.object;
@@ -742,12 +839,14 @@ function GlobeThree({
         if (hit?.panel === "card") {
           if (hit.region === "close") cardCloseHovered = true;
           if (hit.region === "grab") cardGrabHighlighted = true;
+          cardHelp ??= hit.help;
         } else if (hit?.panel === "list") {
           if (hit.region === "grab") listGrabHighlighted = true;
           else listHovered ??= hit.key;
         }
       }
       card.setCloseHovered(cardCloseHovered);
+      card.setPointedHelp(cardHelp);
       card.setGrabHighlighted(cardGrabHighlighted);
       card.update();
       list.setHover(listHovered, listGrabHighlighted);
@@ -803,7 +902,7 @@ function GlobeThree({
         .catch(() => {});
     }
 
-    // The simulated "now" the satellites are drawn at; the Earth and Sun use the same instant.
+    // The "now" the satellites are drawn at; the Earth and Sun use the same instant.
     let simTimeMs = Date.now();
     let lastFrameTime = performance.now();
     let lastSnapshot: PositionsSnapshot | null = null;
@@ -814,7 +913,10 @@ function GlobeThree({
       const now = performance.now();
       const frameDt = (now - lastFrameTime) / 1000;
       lastFrameTime = now;
-      simTimeMs += frameDt * 1000;
+      // Read the wall clock every frame instead of adding up frame times. performance.now() stops
+      // while the computer sleeps, so a summed clock falls behind the snapshots (which use
+      // Date.now()) by the sleep's length and the satellites are drawn far off their orbits.
+      simTimeMs = Date.now();
 
       // Re-upload when a new snapshot arrives or the filter changes.
       const snapshot = positionsRef.current;
@@ -828,6 +930,15 @@ function GlobeThree({
         satellites.setPositions(snapshot, visible);
       }
       satellites.setSelected(selectedIdRef.current);
+      // A filtered-out satellite isn't drawn, so its orbit isn't either.
+      const path = orbitPathRef.current;
+      orbitPath.setPath(
+        path &&
+          path.id === selectedIdRef.current &&
+          satellites.scenePosition(path.id)
+          ? path
+          : null
+      );
       const inXR = renderer.xr.isPresenting;
       satellites.setAngularSizing(inXR);
       renderer.getDrawingBufferSize(drawingBufferSize);
@@ -934,18 +1045,31 @@ function GlobeThree({
     }
 
     async function init() {
-      const loaded = await new TextureLoader().loadAsync(earthTextureUrl);
+      // Draw the first frames with the small preview image. The sharp image loads in the
+      // background and is swapped in when it arrives, so it never delays the first frame.
+      const loaded = await new TextureLoader().loadAsync(earthPreviewUrl);
       if (!disposed) await renderer.init();
       if (disposed) {
         loaded.dispose();
         return;
       }
-      map = loaded;
-      map.colorSpace = NoColorSpace;
-      map.wrapS = RepeatWrapping;
-      map.wrapT = ClampToEdgeWrapping;
+      map = configureEarthMap(loaded);
       earth = createEarth(map);
       inertial.add(earth.mesh);
+      sharpEarthLoadTime()
+        .then(() => loadDecodedTexture(sharpEarthUrl(xr)))
+        .then((sharp) => {
+          if (disposed || !earth) {
+            sharp.dispose();
+            return;
+          }
+          map?.dispose();
+          map = configureEarthMap(sharp);
+          earth.setMap(map);
+        })
+        .catch((err: unknown) => {
+          console.warn("Keeping the preview Earth image:", err);
+        });
       if (xr) {
         // To the user's right on an arc around where they stand, turned about Y to face them.
         card = createXRSatelliteCard(
@@ -1013,6 +1137,7 @@ function GlobeThree({
       canvas.removeEventListener("pointercancel", handlePointerCancel);
       canvas.removeEventListener("wheel", handleWheel);
       satellites.dispose();
+      orbitPath.dispose();
       card?.dispose();
       list?.dispose();
       earth?.dispose();
@@ -1020,7 +1145,7 @@ function GlobeThree({
       renderer.dispose();
       canvas.remove();
     };
-  }, [positionsRef, xr]);
+  }, [positionsRef, orbitPathRef, xr]);
 
   if (error) {
     return <p>Renderer unavailable: {error}</p>;
@@ -1031,19 +1156,13 @@ function GlobeThree({
       {backend && (
         <span className="renderer-backend">Three.js · {backend}</span>
       )}
-      {xrModes.length > 0 && (
+      {/* The page's panel offers Enter VR / AR; exiting is only needed while presenting, when
+          the panel is hidden. */}
+      {presenting && (
         <div className="xr-buttons">
-          {presenting ? (
-            <button onClick={() => startXRRef.current?.("immersive-vr")}>
-              Exit XR
-            </button>
-          ) : (
-            xrModes.map((mode) => (
-              <button key={mode} onClick={() => startXRRef.current?.(mode)}>
-                {mode === "immersive-ar" ? "Enter AR" : "Enter VR"}
-              </button>
-            ))
-          )}
+          <button onClick={() => startXRRef.current?.("immersive-vr")}>
+            Exit XR
+          </button>
         </div>
       )}
     </div>

@@ -4,34 +4,52 @@
  * for a snapshot on an interval.
  */
 import { json2satrec, propagate, type SatRec } from "satellite.js";
-import { FLOATS_PER_SATELLITE } from "../api/satellites";
+import {
+  FLOATS_PER_SATELLITE,
+  ORBIT_PATH_MAX_POINTS,
+  ORBIT_PATH_SEGMENTS,
+  type OrbitPath,
+} from "../api/satellites";
+import { EARTH_RADIUS_KM } from "../constants";
 import type { OrbitalElements } from "./elements";
 
 export type PropagatorRequest =
   // Replaces the satellites to propagate.
   | { type: "load"; elements: OrbitalElements }
   // Asks for every satellite's state at `timeMs` (Unix epoch milliseconds, UTC).
-  | { type: "propagate"; timeMs: number };
+  | { type: "propagate"; timeMs: number }
+  // Asks for one satellite's next revolution, starting at `timeMs`.
+  | { type: "path"; id: number; timeMs: number };
 
 /**
  * Every satellite SGP4 could propagate at `timeMs`, laid out like PositionsSnapshot: `ids[i]` is
  * the NORAD id whose TEME state is `state[i * 6 .. i * 6 + 6]`.
  */
-export interface PropagatorResponse {
+export interface PropagatorSnapshot {
+  type: "snapshot";
   timeMs: number;
   ids: Uint32Array<ArrayBuffer>;
   state: Float32Array<ArrayBuffer>;
 }
 
+export type PropagatorResponse =
+  | PropagatorSnapshot
+  | ({ type: "path" } & OrbitPath);
+
 let satrecs: SatRec[] = [];
 // The NORAD id of satrecs[i].
 let satrecIds = new Uint32Array(0);
+let satrecById = new Map<number, SatRec>();
 
 self.onmessage = (event: MessageEvent<PropagatorRequest>) => {
   const request = event.data;
   if (request.type === "load") {
     satrecIds = request.elements.ids;
     satrecs = Array.from(satrecIds, (_, i) => toSatrec(request.elements, i));
+    satrecById = new Map(satrecs.map((satrec, i) => [satrecIds[i], satrec]));
+  } else if (request.type === "path") {
+    const response = propagatePath(request.id, request.timeMs);
+    self.postMessage(response, { transfer: [response.points.buffer] });
   } else {
     const response = propagateAll(request.timeMs);
     self.postMessage(response, {
@@ -64,14 +82,51 @@ function isFiniteVector(v: { x: number; y: number; z: number }) {
   return Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 }
 
-function propagateAll(timeMs: number): PropagatorResponse {
+function propagatePath(
+  id: number,
+  startMs: number
+): Extract<PropagatorResponse, { type: "path" }> {
+  const satrec = satrecById.get(id);
+  const points = new Float32Array(ORBIT_PATH_MAX_POINTS * 3);
+  let n = 0;
+  if (satrec) {
+    // satrec.no is the mean motion in radians per minute.
+    const stepMs = ((2 * Math.PI) / satrec.no / ORBIT_PATH_SEGMENTS) * 60_000;
+    for (let segment = 0; segment <= ORBIT_PATH_SEGMENTS; segment++) {
+      let result;
+      try {
+        result = propagate(satrec, new Date(startMs + segment * stepMs));
+      } catch {
+        break;
+      }
+      // Stop at the first failure: skipping a sample would draw a false chord across the gap.
+      if (!result || !isFiniteVector(result.position)) break;
+      // The same TEME -> globe axis swap and scale the renderers apply to satellites.
+      const { x, y, z } = result.position;
+      points[n * 3] = x / EARTH_RADIUS_KM;
+      points[n * 3 + 1] = z / EARTH_RADIUS_KM;
+      points[n * 3 + 2] = -y / EARTH_RADIUS_KM;
+      n++;
+    }
+  }
+  return { type: "path", id, points: points.slice(0, n * 3) };
+}
+
+function propagateAll(timeMs: number): PropagatorSnapshot {
   const date = new Date(timeMs);
   const ids = new Uint32Array(satrecs.length);
   const state = new Float32Array(satrecs.length * FLOATS_PER_SATELLITE);
   let n = 0;
   for (let i = 0; i < satrecs.length; i++) {
     // null when SGP4 fails, for example when an orbit has decayed.
-    const result = propagate(satrecs[i], date);
+    // Catch per satellite: if the worker throws, the main thread never gets a reply, so one
+    // bad orbit would stall every snapshot.
+    let result;
+    try {
+      result = propagate(satrecs[i], date);
+    } catch {
+      continue;
+    }
     if (!result) continue;
     const { position, velocity } = result;
     if (!isFiniteVector(position) || !isFiniteVector(velocity)) continue;
@@ -87,6 +142,7 @@ function propagateAll(timeMs: number): PropagatorResponse {
     n++;
   }
   return {
+    type: "snapshot",
     timeMs,
     ids: ids.slice(0, n),
     state: state.slice(0, n * FLOATS_PER_SATELLITE),

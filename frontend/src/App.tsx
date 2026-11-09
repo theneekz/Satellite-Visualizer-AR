@@ -11,6 +11,11 @@ import Globe from "./components/Globe";
 import SatelliteCard from "./components/SatelliteCard";
 import SatelliteFilterBar from "./components/SatelliteFilterBar";
 import SatelliteList from "./components/SatelliteList";
+import SidePanel, {
+  type PanelSection,
+  type XRControls,
+} from "./components/SidePanel";
+import { PHONE_QUERY } from "./constants";
 import {
   DEFAULT_FILTERS,
   filterSatellites,
@@ -20,22 +25,42 @@ import {
 } from "./filters";
 import { usePropagatedPositions } from "./hooks/usePropagatedPositions";
 
-// ?renderer=three swaps in the Three.js globe to compare it with the hand-written WebGPU one, and
-// ?renderer=xr is that globe on WebGL with buttons to enter VR/AR on a headset. It is
+// The XR globe is the Three.js globe on WebGL with buttons to enter VR/AR. Headsets get it
+// automatically; elsewhere ?renderer=xr forces it (with the dev emulator) and ?renderer=three
+// shows the Three.js globe without XR, to compare it with the hand-written WebGPU one. It is
 // code-split, so the default page never downloads Three.js.
 const GlobeThree = lazy(() => import("./components/three/GlobeThree"));
 const RENDERER = new URLSearchParams(window.location.search).get("renderer");
-const USE_XR = RENDERER === "xr";
-const USE_THREE = RENDERER === "three" || USE_XR;
 
-function App() {
+interface AppProps {
+  // Whether this device can run an immersive VR session, as checked before the first render.
+  xrSupported: boolean;
+}
+
+function App({ xrSupported }: AppProps) {
+  const useXR = xrSupported || RENDERER === "xr";
+  const useThree = useXR || RENDERER === "three";
   const [satellites, setSatellites] = useState<SatelliteInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [filters, setFilters] = useState<SatelliteFilters>(DEFAULT_FILTERS);
   // While an XR session runs, the headset shows its own list, so the page's isn't mounted.
   const [presentingXR, setPresentingXR] = useState(false);
-  const positionsRef = usePropagatedPositions(satellites);
+  // The open navigation section, or null when the drawer is closed.
+  const [panelSection, setPanelSection] = useState<PanelSection | null>(
+    "about"
+  );
+  // How to enter VR or AR, once the XR globe knows which modes this device supports.
+  const [xrControls, setXRControls] = useState<XRControls | null>(null);
+  const handleXRModes = useCallback(
+    (modes: XRSessionMode[], start: (mode: XRSessionMode) => void) =>
+      setXRControls(modes.length > 0 ? { modes, start } : null),
+    []
+  );
+  const { positionsRef, orbitPathRef } = usePropagatedPositions(
+    satellites,
+    selectedId
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,30 +104,43 @@ function App() {
     [satellites]
   );
 
+  function selectFromList(id: number) {
+    setSelectedId(id);
+    // On phones the sheet covers the satellite card, so make way for the card.
+    if (window.matchMedia(PHONE_QUERY).matches) setPanelSection(null);
+  }
+
   const selected = satellites.find((s) => s.id === selectedId) ?? null;
 
   return (
     <main>
       {!presentingXR && (
-        <SatelliteList
-          satellites={filtered}
-          totalCount={satellites.length}
-          loading={loading}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
+        <SidePanel
+          xr={xrControls}
+          active={panelSection}
+          onActiveChange={setPanelSection}
         >
-          <SatelliteFilterBar
-            filters={filters}
-            options={filterOptions}
-            onChange={patchFilters}
-            onReset={resetFilters}
-          />
-        </SatelliteList>
+          <SatelliteList
+            satellites={filtered}
+            totalCount={satellites.length}
+            loading={loading}
+            selectedId={selectedId}
+            onSelect={selectFromList}
+          >
+            <SatelliteFilterBar
+              filters={filters}
+              options={filterOptions}
+              onChange={patchFilters}
+              onReset={resetFilters}
+            />
+          </SatelliteList>
+        </SidePanel>
       )}
-      {USE_THREE ? (
+      {useThree ? (
         <Suspense fallback={null}>
           <GlobeThree
             positionsRef={positionsRef}
+            orbitPathRef={orbitPathRef}
             visibleIds={visibleIds}
             selectedId={selectedId}
             selectedSatellite={selected}
@@ -116,22 +154,20 @@ function App() {
               onFiltersReset: resetFilters,
             }}
             onSelect={setSelectedId}
-            xr={USE_XR}
+            xr={useXR}
             onPresentingChange={setPresentingXR}
+            onXRModesChange={handleXRModes}
           />
         </Suspense>
       ) : (
         <Globe
           positionsRef={positionsRef}
+          orbitPathRef={orbitPathRef}
           visibleIds={visibleIds}
           selectedId={selectedId}
           onSelect={setSelectedId}
         />
       )}
-      {/* A full reload, so each renderer starts from a clean GPU context. */}
-      <a className="renderer-switch" href={USE_THREE ? "?" : "?renderer=three"}>
-        {USE_THREE ? "Use WebGPU renderer" : "Use Three.js renderer"}
-      </a>
       {selected && (
         <SatelliteCard
           satellite={selected}

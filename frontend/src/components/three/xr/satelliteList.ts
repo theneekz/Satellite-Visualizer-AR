@@ -15,12 +15,12 @@ import {
   FIRST_LAUNCH_YEAR,
   SEARCH_DEBOUNCE_MS,
 } from "../../../constants";
-import { sentenceCase } from "../../../format";
+import { formatCount, sentenceCase } from "../../../format";
 import { createCanvasLayer } from "./canvasLayer";
+import { createGrabBar } from "./grabBar";
 import {
   CLOSE_SIZE,
   COLORS,
-  GRAB_SPACE,
   LINE_HEIGHT,
   METERS_PER_PIXEL,
   PADDING,
@@ -28,11 +28,9 @@ import {
   TEXT_SIZE,
   TITLE_SIZE,
   drawCloseButton,
-  drawGrabBar,
   drawText,
   font,
   isOnCloseButton,
-  isOnGrabBar,
 } from "./panelStyle";
 
 // Layout, in layout pixels. Rows are taller than the page's 34px so a ray can pick one easily.
@@ -65,7 +63,7 @@ const SCROLLBAR_WIDTH = 4;
 const SCROLLBAR_MIN_HEIGHT = 24;
 // The rows leave a gutter on the right for the scrollbar.
 const ROWS_RIGHT = WIDTH - PADDING - SCROLLBAR_WIDTH - 6;
-const LAYER_HEIGHT = HEIGHT + GRAB_SPACE;
+const LAYER_HEIGHT = HEIGHT;
 
 type ChipFilter = "objectType" | "size";
 
@@ -185,6 +183,11 @@ export function createXRSatelliteList(
     quaternion,
     draw,
   });
+  // Under the list, moving with it since it is a child of the list's object. The list's height
+  // never changes, so the bar stays put.
+  const grabBar = createGrabBar(renderer, WIDTH);
+  layer.object.add(grabBar.object);
+  grabBar.placeBelow(HEIGHT, LAYER_HEIGHT);
 
   // The hidden input the system keyboard types into. It has to be in the DOM and focusable.
   const input = document.createElement("input");
@@ -520,10 +523,10 @@ export function createXRSatelliteList(
 
     // Header: the title with the count, as on the page, and the close button.
     const title = loading
-      ? "Satellites"
+      ? "Artificial Space Objects"
       : satellites.length === totalCount
-        ? `Satellites (${totalCount})`
-        : `Satellites (${satellites.length} of ${totalCount})`;
+        ? `Artificial Space Objects (${formatCount(totalCount)})`
+        : `Artificial Space Objects (${formatCount(satellites.length)} of ${formatCount(totalCount)})`;
     ctx.fillStyle = COLORS.text;
     drawText(
       ctx,
@@ -572,7 +575,6 @@ export function createXRSatelliteList(
 
     drawRows(ctx);
 
-    drawGrabBar(ctx, WIDTH, HEIGHT, grabHighlighted);
   }
 
   /** Updates the rows, the count, and whether they are still loading; cheap when unchanged. */
@@ -638,9 +640,11 @@ export function createXRSatelliteList(
     open = next;
     hoveredKey = null;
     grabHighlighted = false;
+    grabBar.setHighlighted(false);
     cancelPointer();
     if (!next) input.blur();
     layer.setVisible(next);
+    grabBar.setVisible(next);
     layer.invalidate();
   }
 
@@ -649,7 +653,19 @@ export function createXRSatelliteList(
    * distance to it; null if it misses the list and its grab bar, or the list is closed.
    */
   function hitTest(raycaster: Raycaster): ListHit | null {
+    // Tested first, so the list's own layer updates the matrices the bar's test relies on.
     const hit = layer.hitTest(raycaster);
+    const bar = grabBar.hitTest(raycaster);
+    if (bar) {
+      return {
+        region: "grab",
+        target: null,
+        key: null,
+        x: bar.x,
+        local: layer.object.worldToLocal(bar.point.clone()),
+        distance: bar.distance,
+      };
+    }
     if (!hit) return null;
     const { x, y, local, distance } = hit;
     const result = (
@@ -663,8 +679,6 @@ export function createXRSatelliteList(
       local,
       distance,
     });
-    if (y > HEIGHT)
-      return isOnGrabBar(x, y, WIDTH, HEIGHT) ? result("grab", null) : null;
     if (isOnCloseButton(x, y, CLOSE_X, CLOSE_Y))
       return result("list", { kind: "close" });
     const inside = (left: number, top: number, width: number, height: number) =>
@@ -708,6 +722,7 @@ export function createXRSatelliteList(
     if (key === hoveredKey && grab === grabHighlighted) return;
     hoveredKey = key;
     grabHighlighted = grab;
+    grabBar.setHighlighted(grab);
     layer.invalidate();
   }
 
@@ -813,11 +828,15 @@ export function createXRSatelliteList(
     input.removeEventListener("keydown", handleKeyDown);
     input.remove();
     layer.dispose();
+    grabBar.dispose();
   }
 
   return {
     object: layer.object,
-    setUsesLayers: layer.setUsesLayers,
+    setUsesLayers: (value: boolean) => {
+      layer.setUsesLayers(value);
+      grabBar.setUsesLayers(value);
+    },
     setSatellites,
     setFilters,
     setSelected,
@@ -830,7 +849,10 @@ export function createXRSatelliteList(
     pointerMove,
     pointerUp,
     cancelPointer,
-    update: layer.update,
+    update: () => {
+      layer.update();
+      grabBar.update();
+    },
     dispose,
   };
 }
