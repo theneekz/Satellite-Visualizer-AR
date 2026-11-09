@@ -101,6 +101,13 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+/* Dotted underlines tell touch users, who have no hover, that these labels explain themselves. */
+.satellite-card__label .tooltip-trigger,
+.satellite-card__key {
+  text-decoration: underline dotted rgba(255, 255, 255, 0.35);
+  text-underline-offset: 3px;
+}
+
 .satellite-card__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,7 +1,9 @@
-import { useEffect, useState, type RefObject } from "react";
+import { Fragment, useEffect, useState, type RefObject } from "react";
 import type { PositionsSnapshot, SatelliteInfo } from "../api/satellites";
 import type { LiveState } from "./liveState";
+import Tooltip from "./Tooltip";
 import {
+  CARD_HELP,
   fmt,
   liveStateAt,
   satelliteDetails,
@@ -10,12 +12,12 @@ import {
 import "./SatelliteCard.css";
 import { DAY_MS, EARTH_RADIUS_KM } from "../constants";
 
-function Metric({ label, value }: DetailMetric) {
+function Metric({ label, value, help }: DetailMetric) {
   return (
-    <div>
+    <Tooltip as="div" text={help}>
       <div className="satellite-card__key">{label}</div>
       <div className="satellite-card__value">{value}</div>
-    </div>
+    </Tooltip>
   );
 }
 
@@ -66,47 +68,59 @@ function OrbitDiagram({ info, nowMs }: { info: SatelliteInfo; nowMs: number }) {
 
   return (
     <>
-      <svg
-        className="satellite-card__diagram"
-        viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-        role="img"
-        aria-label={`Orbit shape: perigee ${fmt(info.perigee_km)} km, apogee ${fmt(info.apogee_km)} km`}
-      >
-        <ellipse
-          cx={centerX}
-          cy={centerY}
-          rx={rx}
-          ry={ry}
-          fill="none"
-          stroke="rgba(255,255,255,.35)"
-          strokeDasharray="3 3"
-        />
-        <circle
-          cx={earthX}
-          cy={centerY}
-          r={earthR}
-          fill="#0f2a4a"
-          stroke="#1d4f86"
-          strokeWidth={0.5}
-        />
-        <circle cx={centerX - rx} cy={centerY} r={3} fill="#5dcaa5" />
-        <circle cx={centerX + rx} cy={centerY} r={3} fill="#ef9f27" />
-        <rect x={satX - 3} y={satY - 3} width={6} height={6} fill="#fac775" />
-        <circle
-          cx={satX}
-          cy={satY}
-          r={9}
-          fill="none"
-          stroke="#85b7eb"
-          strokeWidth={1.5}
-        />
-      </svg>
+      <Tooltip as="div" text={CARD_HELP.orbitDiagram}>
+        <svg
+          className="satellite-card__diagram"
+          viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+          role="img"
+          aria-label={`Orbit shape: perigee ${fmt(info.perigee_km)} km, apogee ${fmt(info.apogee_km)} km`}
+        >
+          <ellipse
+            cx={centerX}
+            cy={centerY}
+            rx={rx}
+            ry={ry}
+            fill="none"
+            stroke="rgba(255,255,255,.35)"
+            strokeDasharray="3 3"
+          />
+          <circle
+            cx={earthX}
+            cy={centerY}
+            r={earthR}
+            fill="#0f2a4a"
+            stroke="#1d4f86"
+            strokeWidth={0.5}
+          />
+          <circle cx={centerX - rx} cy={centerY} r={3} fill="#5dcaa5" />
+          <circle cx={centerX + rx} cy={centerY} r={3} fill="#ef9f27" />
+          <rect x={satX - 3} y={satY - 3} width={6} height={6} fill="#fac775" />
+          <circle
+            cx={satX}
+            cy={satY}
+            r={9}
+            fill="none"
+            stroke="#85b7eb"
+            strokeWidth={1.5}
+          />
+        </svg>
+      </Tooltip>
       <ul className="satellite-card__legend">
-        <li className="satellite-card__legend-item satellite-card__legend-item--perigee">
-          Perigee {fmt(info.perigee_km)} km
+        <li>
+          <Tooltip
+            text={CARD_HELP.perigee}
+            className="satellite-card__legend-item satellite-card__legend-item--perigee"
+          >
+            Perigee {fmt(info.perigee_km)} km
+          </Tooltip>
         </li>
-        <li className="satellite-card__legend-item satellite-card__legend-item--apogee">
-          Apogee {fmt(info.apogee_km)} km
+        <li>
+          <Tooltip
+            text={CARD_HELP.apogee}
+            className="satellite-card__legend-item satellite-card__legend-item--apogee"
+          >
+            Apogee {fmt(info.apogee_km)} km
+          </Tooltip>
         </li>
       </ul>
     </>
@@ -151,8 +165,17 @@ function SatelliteCard({
     <aside className="satellite-card" aria-label={`${details.name} details`}>
       <div className="satellite-card__header">
         <div>
-          <h2 className="satellite-card__name">{details.name}</h2>
-          <p className="satellite-card__sub">{details.subtitle}</p>
+          <h2 className="satellite-card__name">
+            <Tooltip text={CARD_HELP.name}>{details.name}</Tooltip>
+          </h2>
+          <p className="satellite-card__sub">
+            {details.identifiers.map((identifier, i) => (
+              <Fragment key={identifier.help}>
+                {i > 0 && " · "}
+                <Tooltip text={identifier.help}>{identifier.text}</Tooltip>
+              </Fragment>
+            ))}
+          </p>
         </div>
         <button
           type="button"
@@ -166,29 +189,33 @@ function SatelliteCard({
 
       <div className="satellite-card__badges">
         {details.badges.map((badge) => (
-          <span
+          <Tooltip
             key={badge.text}
+            text={badge.help}
             className={`satellite-card__badge${badge.tone === "type" ? " satellite-card__badge--type" : ""}`}
           >
             {badge.text}
-          </span>
+          </Tooltip>
         ))}
       </div>
 
       {details.sections.map((section) => (
         <section key={section.id} className="satellite-card__section">
-          <h3 className="satellite-card__label">{section.label}</h3>
+          <h3 className="satellite-card__label">
+            <Tooltip text={section.help}>{section.label}</Tooltip>
+          </h3>
           {section.id === "orbit" && (
             <OrbitDiagram info={satellite} nowMs={nowMs} />
           )}
           {section.id === "data" && (
             <div className="satellite-card__epoch">
               <Metric {...details.epoch} />
-              <span
+              <Tooltip
+                text={CARD_HELP.age}
                 className={`satellite-card__badge satellite-card__badge--${details.age.level}`}
               >
                 {details.age.text}
-              </span>
+              </Tooltip>
             </div>
           )}
           <div className="satellite-card__grid">
