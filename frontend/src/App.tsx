@@ -57,7 +57,10 @@ function App({ xrSupported }: AppProps) {
       setXRControls(modes.length > 0 ? { modes, start } : null),
     []
   );
-  const positionsRef = usePropagatedPositions(satellites);
+  const { positionsRef, orbitPathRef } = usePropagatedPositions(
+    satellites,
+    selectedId
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,6 +140,7 @@ function App({ xrSupported }: AppProps) {
         <Suspense fallback={null}>
           <GlobeThree
             positionsRef={positionsRef}
+            orbitPathRef={orbitPathRef}
             visibleIds={visibleIds}
             selectedId={selectedId}
             selectedSatellite={selected}
@@ -158,6 +162,7 @@ function App({ xrSupported }: AppProps) {
       ) : (
         <Globe
           positionsRef={positionsRef}
+          orbitPathRef={orbitPathRef}
           visibleIds={visibleIds}
           selectedId={selectedId}
           onSelect={setSelectedId}

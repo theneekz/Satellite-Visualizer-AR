@@ -48,6 +48,20 @@ export interface PositionsSnapshot {
   indexById: Map<number, number>;
 }
 
+// Segments in one drawn revolution, evenly spaced in time. Satellites sweep fastest at perigee, so
+// this is high enough to keep eccentric orbits smooth there.
+export const ORBIT_PATH_SEGMENTS = 1440;
+export const ORBIT_PATH_MAX_POINTS = ORBIT_PATH_SEGMENTS + 1;
+
+/**
+ * A satellite's next revolution. `points` holds x, y, z triples in globe units (Earth radius = 1,
+ * inertial, Y as the polar axis). It ends early if SGP4 fails partway, for example on a decay.
+ */
+export interface OrbitPath {
+  id: number;
+  points: Float32Array<ArrayBuffer>;
+}
+
 /** The TEME state of the satellite at `index` in a snapshot. */
 export function positionAt(
   snapshot: PositionsSnapshot,
