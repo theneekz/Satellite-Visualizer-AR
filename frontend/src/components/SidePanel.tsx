@@ -153,6 +153,10 @@ function SidePanel({
               );
             })}
           </div>
+          <p className="side-panel__note">
+            Gray buttons mean this browser can't run that mode.{" "}
+            <ExternalLink href={DEMO_URL}>Watch the demo</ExternalLink>
+          </p>
           <p className="side-panel__intro">
             With a headset, the globe floats in front of you, and you can look
             at it from any side.
@@ -176,10 +180,6 @@ function SidePanel({
           <p className="side-panel__intro">
             SatViz is intended for Meta Quest. Other devices that support WebXR,
             the web standard for VR and AR, may work but are untested.
-          </p>
-          <p className="side-panel__note">
-            Gray buttons mean this browser can't run that mode.{" "}
-            <ExternalLink href={DEMO_URL}>Watch the demo</ExternalLink>
           </p>
         </section>
       </div>
