@@ -22,7 +22,7 @@ export type PropagatorRequest =
   | { type: "path"; id: number; timeMs: number };
 
 /**
- * Every satellite SGP4 could propagate at `timeMs`, laid out like PositionsSnapshot: `ids[i]` is
+ * Every satellite SGP4 could propagate to a believable position at `timeMs`, laid out like PositionsSnapshot: `ids[i]` is
  * the NORAD id whose TEME state is `state[i * 6 .. i * 6 + 6]`.
  */
 export interface PropagatorSnapshot {
@@ -82,6 +82,15 @@ function isFiniteVector(v: { x: number; y: number; z: number }) {
   return Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 }
 
+/**
+ * Whether the last propagate() call on this satrec went past the point where SGP4's model decays.
+ * SGP4 scales the semi-major axis by tempa^2, and drag takes tempa from 1 toward 0. Past 0 the
+ * square grows again, so SGP4 returns radii of up to millions of km with no error.
+ */
+function isPastModelDecay(satrec: SatRec) {
+  return satrec.tempa <= 0;
+}
+
 function propagatePath(
   id: number,
   startMs: number
@@ -100,7 +109,12 @@ function propagatePath(
         break;
       }
       // Stop at the first failure: skipping a sample would draw a false chord across the gap.
-      if (!result || !isFiniteVector(result.position)) break;
+      if (
+        !result ||
+        !isFiniteVector(result.position) ||
+        isPastModelDecay(satrec)
+      )
+        break;
       // The same TEME -> globe axis swap and scale the renderers apply to satellites.
       const { x, y, z } = result.position;
       points[n * 3] = x / EARTH_RADIUS_KM;
@@ -130,6 +144,7 @@ function propagateAll(timeMs: number): PropagatorSnapshot {
     if (!result) continue;
     const { position, velocity } = result;
     if (!isFiniteVector(position) || !isFiniteVector(velocity)) continue;
+    if (isPastModelDecay(satrecs[i])) continue;
 
     const o = n * FLOATS_PER_SATELLITE;
     state[o] = position.x;
