@@ -30,7 +30,7 @@ The globe is a procedurally built UV sphere with an Earth texture (NASA's Blue M
 
 To keep the first frame fast, the globe first draws a 2048x1024 WebP preview of about 210 KB. After the satellite data loads and the browser is idle, a sharp image loads and replaces it: 8192x4096 (about 2.3 MB) on desktop and headsets, or 4096x2048 (about 680 KB) on touch devices, where 8K's roughly 170 MB of GPU memory is too much for older phones. The sharp image is decoded off the main thread so the swap doesn't stall a frame. index.html preloads the satellite data so its download starts before any JavaScript runs. Both renderers use mipmaps and anisotropic filtering so the sharp image doesn't shimmer when the globe is small or seen at a steep angle.
 
-The globe is lit by the real Sun: `sun.ts` computes the Sun's direction from the simulated time with the Astronomical Almanac's low-precision formula (about 0.01 degrees), and the globe shader shades a day side, a soft terminator, and a dim night side. The formula measures from the equinox of date, like TEME, so the Sun direction gets the same TEME to world axis swap and camera rotation as the satellites, but not the Earth's spin.
+The globe is lit by the real Sun: `sun.ts` computes the Sun's direction from the simulated time with the Astronomical Almanac's low-precision formula (about 0.01 degrees), and the globe shader shades a day side, a soft terminator, and a dim night side. The formula measures from the equinox of date, like TEME, so the Sun direction gets the same TEME to world axis swap and camera rotation as the satellites, but not the Earth's spin. Satellites inside the Earth's shadow, modeled as a cylinder directly behind the Earth, are drawn dimmer unless selected.
 
 Because TEME and GMST come from the same model, satellites line up with the texture without a separate precession and nutation correction.
 
@@ -138,4 +138,4 @@ Skyfield can compute a precise Sun position but needs a JPL ephemeris file (abou
 
 ## Future Work
 
-Element set history (dated payloads in R2), satcat join for country and launch data, satellites shaded by whether they are in sunlight (satellite.js has `shadowFraction`), pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.
+Element set history (dated payloads in R2), satcat join for country and launch data, pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.
