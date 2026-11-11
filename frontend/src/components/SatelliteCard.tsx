@@ -1,6 +1,9 @@
-import { Fragment, useEffect, useState, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
 import type { PositionsSnapshot, SatelliteInfo } from "../api/satellites";
 import type { LiveState } from "./liveState";
+import { useContainTouches } from "../hooks/useContainTouches";
+import { useSheetDrag } from "../hooks/useSheetDrag";
+import SheetHandle from "./SheetHandle";
 import Tooltip from "./Tooltip";
 import {
   CARD_HELP,
@@ -127,6 +130,9 @@ function OrbitDiagram({ info, nowMs }: { info: SatelliteInfo; nowMs: number }) {
   );
 }
 
+// How far, in pixels, a drag on the handle must go to change the sheet's state.
+const DRAG_THRESHOLD = 40;
+
 function SatelliteCard({
   satellite,
   positionsRef,
@@ -159,72 +165,108 @@ function SatelliteCard({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  // On phones the card is a bottom sheet. It opens as a short peek with the title and badges,
+  // and the handle expands it to the full details. Wider screens always show everything.
+  const [expanded, setExpanded] = useState(false);
+  const sheetRef = useRef<HTMLElement>(null);
+  useContainTouches(sheetRef, ".satellite-card__body");
+
+  function handleDragEnd(deltaY: number) {
+    if (deltaY < -DRAG_THRESHOLD) setExpanded(true);
+    else if (deltaY > DRAG_THRESHOLD) {
+      // Dragging down from the peek dismisses the card, as in map apps.
+      if (expanded) setExpanded(false);
+      else onClose();
+    }
+  }
+
+  // The whole title area drags the sheet, not only the handle, so it's easy to grab.
+  const dragHandlers = useSheetDrag({
+    sheetRef,
+    canGrow: !expanded,
+    onDragEnd: handleDragEnd,
+  });
+
   const details = satelliteDetails(satellite, live, nowMs);
 
   return (
-    <aside className="satellite-card" aria-label={`${details.name} details`}>
-      <div className="satellite-card__header">
-        <div>
-          <h2 className="satellite-card__name">
-            <Tooltip text={CARD_HELP.name}>{details.name}</Tooltip>
-          </h2>
-          <p className="satellite-card__sub">
-            {details.identifiers.map((identifier, i) => (
-              <Fragment key={identifier.help}>
-                {i > 0 && " · "}
-                <Tooltip text={identifier.help}>{identifier.text}</Tooltip>
-              </Fragment>
-            ))}
-          </p>
+    <aside
+      ref={sheetRef}
+      className={`satellite-card${expanded ? "" : " satellite-card--peek"}`}
+      aria-label={`${details.name} details`}
+    >
+      <div className="satellite-card__top" {...dragHandlers}>
+        <SheetHandle
+          label={expanded ? "Show less" : "Show all details"}
+          expanded={expanded}
+          onTap={() => setExpanded(!expanded)}
+        />
+        <div className="satellite-card__header">
+          <div>
+            <h2 className="satellite-card__name">
+              <Tooltip text={CARD_HELP.name}>{details.name}</Tooltip>
+            </h2>
+            <p className="satellite-card__sub">
+              {details.identifiers.map((identifier, i) => (
+                <Fragment key={identifier.help}>
+                  {i > 0 && " · "}
+                  <Tooltip text={identifier.help}>{identifier.text}</Tooltip>
+                </Fragment>
+              ))}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="satellite-card__close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
-        <button
-          type="button"
-          className="satellite-card__close"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          ×
-        </button>
       </div>
 
-      <div className="satellite-card__badges">
-        {details.badges.map((badge) => (
-          <Tooltip
-            key={badge.text}
-            text={badge.help}
-            className={`satellite-card__badge${badge.tone === "type" ? " satellite-card__badge--type" : ""}`}
-          >
-            {badge.text}
-          </Tooltip>
+      {/* Only the body scrolls, so the name and close button stay in view. */}
+      <div className="satellite-card__body">
+        <div className="satellite-card__badges">
+          {details.badges.map((badge) => (
+            <Tooltip
+              key={badge.text}
+              text={badge.help}
+              className={`satellite-card__badge${badge.tone === "type" ? " satellite-card__badge--type" : ""}`}
+            >
+              {badge.text}
+            </Tooltip>
+          ))}
+        </div>
+
+        {details.sections.map((section) => (
+          <section key={section.id} className="satellite-card__section">
+            <h3 className="satellite-card__label">
+              <Tooltip text={section.help}>{section.label}</Tooltip>
+            </h3>
+            {section.id === "orbit" && (
+              <OrbitDiagram info={satellite} nowMs={nowMs} />
+            )}
+            {section.id === "data" && (
+              <div className="satellite-card__epoch">
+                <Metric {...details.epoch} />
+                <Tooltip
+                  text={CARD_HELP.age}
+                  className={`satellite-card__badge satellite-card__badge--${details.age.level}`}
+                >
+                  {details.age.text}
+                </Tooltip>
+              </div>
+            )}
+            <div className="satellite-card__grid">
+              {section.metrics.map((metric) => (
+                <Metric key={metric.label} {...metric} />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
-
-      {details.sections.map((section) => (
-        <section key={section.id} className="satellite-card__section">
-          <h3 className="satellite-card__label">
-            <Tooltip text={section.help}>{section.label}</Tooltip>
-          </h3>
-          {section.id === "orbit" && (
-            <OrbitDiagram info={satellite} nowMs={nowMs} />
-          )}
-          {section.id === "data" && (
-            <div className="satellite-card__epoch">
-              <Metric {...details.epoch} />
-              <Tooltip
-                text={CARD_HELP.age}
-                className={`satellite-card__badge satellite-card__badge--${details.age.level}`}
-              >
-                {details.age.text}
-              </Tooltip>
-            </div>
-          )}
-          <div className="satellite-card__grid">
-            {section.metrics.map((metric) => (
-              <Metric key={metric.label} {...metric} />
-            ))}
-          </div>
-        </section>
-      ))}
     </aside>
   );
 }

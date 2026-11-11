@@ -1,4 +1,7 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { useContainTouches } from "../hooks/useContainTouches";
+import { useSheetDrag } from "../hooks/useSheetDrag";
+import SheetHandle from "./SheetHandle";
 import "./SidePanel.css";
 
 const REPO_URL = "https://github.com/theneekz/Satellite-Visualizer-AR";
@@ -18,6 +21,10 @@ const XR_MODES: { mode: XRSessionMode; label: string }[] = [
   { mode: "immersive-vr", label: "Enter VR" },
   { mode: "immersive-ar", label: "Enter AR" },
 ];
+
+// On phones, the handle and each section's heading drag the drawer sheet.
+const DRAG_FROM =
+  ".sheet-handle, .side-panel__site-title, .side-panel__title, .satellite-list__title";
 
 const DESTINATIONS: { id: PanelSection; label: string; icon: ReactNode }[] = [
   { id: "about", label: "About", icon: <InfoIcon /> },
@@ -44,6 +51,19 @@ function SidePanel({
   // The satellite list, shown in the Objects section.
   children: ReactNode;
 }) {
+  const drawerRef = useRef<HTMLDivElement>(null);
+  // The list scrolls inside its own element, which is inside the body.
+  useContainTouches(drawerRef, ".side-panel__body, .satellite-list__items");
+
+  const dragHandlers = useSheetDrag({
+    sheetRef: drawerRef,
+    canGrow: false,
+    dragFrom: DRAG_FROM,
+    onDragEnd: (deltaY) => {
+      if (deltaY > 60) onActiveChange(null);
+    },
+  });
+
   return (
     <nav className="side-panel" aria-label="SatViz">
       <div className="side-panel__rail">
@@ -69,119 +89,130 @@ function SidePanel({
         ))}
       </div>
 
-      <div className="side-panel__drawer" hidden={active === null}>
-        {/* Sections stay mounted while hidden so the filters keep any partly typed input. */}
-        <div
-          id="side-panel-objects"
-          className="side-panel__section side-panel__section--objects"
-          hidden={active !== "objects"}
-        >
-          {children}
-        </div>
-
-        <section
-          id="side-panel-about"
-          className="side-panel__section"
-          aria-labelledby="side-panel-about-title"
-          hidden={active !== "about"}
-        >
-          <h2 id="side-panel-about-title" className="side-panel__site-title">
-            SatViz
-          </h2>
-          <p className="side-panel__intro">
-            SatViz (Satellite Visualizer) is an efficient, live 3D map of all
-            public human-made objects circling Earth.
-          </p>
-          <p className="side-panel__note">
-            Built by <ExternalLink href={AUTHOR_URL}>Niko Sward</ExternalLink>
-            <span aria-hidden="true"> · </span>
-            <ExternalLink href={REPO_URL}>Source</ExternalLink>
-          </p>
-          <p className="side-panel__intro">
-            Each dot is one object: a satellite like Starlink, a part of the
-            International Space Station (ISS), or space junk like a used rocket
-            part.
-          </p>
-          <h3 className="side-panel__subtitle">Try it</h3>
-          <ul className="side-panel__list">
-            <li>Drag the globe to spin it.</li>
-            <li>Scroll or pinch to zoom.</li>
-            <li>Select a dot to see what it is.</li>
-            <li>
-              Open Objects to filter, search, and select from the full list of
-              30k+ objects.
-            </li>
-          </ul>
-          <p className="side-panel__intro">
-            SatViz downloads new tracking data about every 12 hours from
-            Spacebook. Your browser uses that data to work out where each object
-            is at this moment.
-          </p>
-          <p className="side-panel__intro">
-            This project set out to build an efficient 3D satellite visualizer
-            and compare three rendering strategies:{" "}
-            {/* These stay in this tab because each tab runs its own globe and worker. */}
-            <a href="/">WebGPU</a>, <a href="/?renderer=three">Three.js</a>, and{" "}
-            <a href="/?renderer=xr">VR/AR WebGL</a>.
-          </p>
-        </section>
-
-        <section
-          id="side-panel-vr"
-          className="side-panel__section"
-          aria-labelledby="side-panel-vr-title"
-          hidden={active !== "vr"}
-        >
-          <h2 id="side-panel-vr-title" className="side-panel__title">
-            VR and AR
-          </h2>
-          <div className="side-panel__vr-actions">
-            {XR_MODES.map(({ mode, label }) => {
-              const supported = xr?.modes.includes(mode) ?? false;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  disabled={!supported}
-                  title={
-                    supported ? undefined : "Not supported in this browser"
-                  }
-                  onClick={() => xr?.start(mode)}
-                >
-                  {label}
-                </button>
-              );
-            })}
+      <div
+        ref={drawerRef}
+        className={`side-panel__drawer${active === "objects" ? " side-panel__drawer--full" : ""}`}
+        {...dragHandlers}
+        hidden={active === null}
+      >
+        {/* On phones the drawer is a sheet that is always at full height, so the handle closes it
+            with a tap or a drag down. */}
+        <SheetHandle label="Close panel" onTap={() => onActiveChange(null)} />
+        {/* Only the body scrolls, so the handle stays at the top of the sheet. */}
+        <div className="side-panel__body">
+          {/* Sections stay mounted while hidden so the filters keep any partly typed input. */}
+          <div
+            id="side-panel-objects"
+            className="side-panel__section side-panel__section--objects"
+            hidden={active !== "objects"}
+          >
+            {children}
           </div>
-          <p className="side-panel__note">
-            Gray buttons mean this browser can't run that mode.{" "}
-            <ExternalLink href={DEMO_URL}>Watch the demo</ExternalLink>
-          </p>
-          <p className="side-panel__intro">
-            With a headset, the globe floats in front of you, and you can look
-            at it from any side.
-          </p>
-          <ul className="side-panel__list">
-            <li>
-              <strong>Virtual reality (VR)</strong> replaces everything you see
-              with a digital scene.
-            </li>
-            <li>
-              <strong>Augmented reality (AR)</strong> places the globe in your
-              real room, so you can still see around you.
-            </li>
-          </ul>
-          <h3 className="side-panel__subtitle">How to start</h3>
-          <ol className="side-panel__list">
-            <li>Put on a Meta Quest headset.</li>
-            <li>Open this page in the headset's web browser.</li>
-            <li>Select Enter VR or Enter AR.</li>
-          </ol>
-          <p className="side-panel__intro">
-            SatViz is intended for Meta Quest. Other devices that support WebXR,
-            the web standard for VR and AR, may work but are untested.
-          </p>
-        </section>
+
+          <section
+            id="side-panel-about"
+            className="side-panel__section"
+            aria-labelledby="side-panel-about-title"
+            hidden={active !== "about"}
+          >
+            <h2 id="side-panel-about-title" className="side-panel__site-title">
+              SatViz
+            </h2>
+            <p className="side-panel__intro">
+              SatViz (Satellite Visualizer) is an efficient, live 3D map of all
+              public human-made objects circling Earth.
+            </p>
+            <p className="side-panel__note">
+              Built by <ExternalLink href={AUTHOR_URL}>Niko Sward</ExternalLink>
+              <span aria-hidden="true"> · </span>
+              <ExternalLink href={REPO_URL}>Source</ExternalLink>
+            </p>
+            <p className="side-panel__intro">
+              Each dot is one object: a satellite like Starlink, a part of the
+              International Space Station (ISS), or space junk like a used
+              rocket part.
+            </p>
+            <h3 className="side-panel__subtitle">Try it</h3>
+            <ul className="side-panel__list">
+              <li>Drag the globe to spin it.</li>
+              <li>Scroll or pinch to zoom.</li>
+              <li>Select a dot to see what it is.</li>
+              <li>
+                Open Objects to filter, search, and select from the full list of
+                30k+ objects.
+              </li>
+            </ul>
+            <p className="side-panel__intro">
+              SatViz downloads new tracking data about every 12 hours from
+              Spacebook. Your browser uses that data to work out where each
+              object is at this moment.
+            </p>
+            <p className="side-panel__intro">
+              This project set out to build an efficient 3D satellite visualizer
+              and compare three rendering strategies:{" "}
+              {/* These stay in this tab because each tab runs its own globe and worker. */}
+              <a href="/">WebGPU</a>, <a href="/?renderer=three">Three.js</a>,
+              and <a href="/?renderer=xr">VR/AR WebGL</a>.
+            </p>
+          </section>
+
+          <section
+            id="side-panel-vr"
+            className="side-panel__section"
+            aria-labelledby="side-panel-vr-title"
+            hidden={active !== "vr"}
+          >
+            <h2 id="side-panel-vr-title" className="side-panel__title">
+              VR and AR
+            </h2>
+            <div className="side-panel__vr-actions">
+              {XR_MODES.map(({ mode, label }) => {
+                const supported = xr?.modes.includes(mode) ?? false;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={!supported}
+                    title={
+                      supported ? undefined : "Not supported in this browser"
+                    }
+                    onClick={() => xr?.start(mode)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="side-panel__note">
+              Gray buttons mean this browser can't run that mode.{" "}
+              <ExternalLink href={DEMO_URL}>Watch the demo</ExternalLink>
+            </p>
+            <p className="side-panel__intro">
+              With a headset, the globe floats in front of you, and you can look
+              at it from any side.
+            </p>
+            <ul className="side-panel__list">
+              <li>
+                <strong>Virtual reality (VR)</strong> replaces everything you
+                see with a digital scene.
+              </li>
+              <li>
+                <strong>Augmented reality (AR)</strong> places the globe in your
+                real room, so you can still see around you.
+              </li>
+            </ul>
+            <h3 className="side-panel__subtitle">How to start</h3>
+            <ol className="side-panel__list">
+              <li>Put on a Meta Quest headset.</li>
+              <li>Open this page in the headset's web browser.</li>
+              <li>Select Enter VR or Enter AR.</li>
+            </ol>
+            <p className="side-panel__intro">
+              SatViz is intended for Meta Quest. Other devices that support
+              WebXR, the web standard for VR and AR, may work but are untested.
+            </p>
+          </section>
+        </div>
       </div>
     </nav>
   );

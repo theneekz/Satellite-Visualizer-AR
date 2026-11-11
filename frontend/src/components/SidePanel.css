@@ -137,6 +137,14 @@
   border-right: 1px solid var(--panel-line);
 }
 
+/* Holds the sections below the phone sheet's handle, and is the part that scrolls there. */
+.side-panel__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .side-panel__drawer[hidden],
 .side-panel__section[hidden] {
   display: none;
@@ -292,18 +300,35 @@
     bottom: 48px;
     left: 0;
     width: auto;
-    /* Keeps the longer sections reachable on short screens. */
     max-height: calc(100dvh - 64px);
-    overflow-y: auto;
-    padding: 16px 16px 12px;
+    /* The handle supplies the space at the top. No bottom padding: the content scrolls, so it can
+       run right up to the bar. */
+    padding: 0 16px;
+    /* Eases the sheet back into place after a drag too short to close it. */
+    transition: transform 0.25s ease;
     border-top: 1px solid var(--panel-line);
     border-right: 0;
     border-radius: 16px 16px 0 0;
   }
 
-  /* The list fills its parent's height, so the sheet needs a definite one for this section. */
-  .side-panel__section--objects {
-    flex: none;
-    height: 60dvh;
+  /* Section headings also drag the sheet (see DRAG_FROM in SidePanel.tsx), so the browser
+     mustn't scroll or zoom the page from them. */
+  .side-panel__site-title,
+  .side-panel__title,
+  .side-panel .satellite-list__title {
+    touch-action: none;
+  }
+
+  /* Keeps the longer sections reachable on short screens. */
+  .side-panel__body {
+    overflow-y: auto;
+    /* Keeps a scroll that reaches the end from moving the page, which can pull to refresh. */
+    overscroll-behavior: contain;
+  }
+
+  /* The list fills its parent's height, so the Objects sheet needs a definite one. It opens at
+     full height, like an expanded satellite card. */
+  .side-panel__drawer--full {
+    height: calc(100dvh - 64px);
   }
 }

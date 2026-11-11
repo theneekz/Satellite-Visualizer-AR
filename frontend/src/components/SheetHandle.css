@@ -1,0 +1,46 @@
+/* Panels are only bottom sheets on phones, so the handle only shows there. */
+.sheet-handle {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .sheet-handle {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    cursor: grab;
+    /* Stops the browser from scrolling or zooming the page while the handle is dragged. */
+    touch-action: none;
+  }
+
+  .sheet-handle:active {
+    cursor: grabbing;
+  }
+
+  .sheet-handle:focus-visible {
+    outline: none;
+  }
+
+  .sheet-handle:focus-visible .sheet-handle__bar {
+    outline: 2px solid #85b7eb;
+    outline-offset: 3px;
+  }
+
+  .sheet-handle__bar {
+    width: 56px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 2px;
+  }
+
+  /* Sheets ease between states, but not while a finger is moving them. */
+  .is-dragging {
+    transition: none !important;
+  }
+}
