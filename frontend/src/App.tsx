@@ -23,6 +23,7 @@ import {
   isFiltering,
   type SatelliteFilters,
 } from "./filters";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { usePropagatedPositions } from "./hooks/usePropagatedPositions";
 
 // The XR globe is the Three.js globe on WebGL with buttons to enter VR/AR. Headsets get it
@@ -104,13 +105,18 @@ function App({ xrSupported }: AppProps) {
     [satellites]
   );
 
-  function selectFromList(id: number) {
+  // On phones the drawer and the satellite card are both bottom sheets, so only one shows at a
+  // time. Selecting a satellite closes the drawer.
+  const isPhone = useMediaQuery(PHONE_QUERY);
+  function selectSatellite(id: number | null) {
     setSelectedId(id);
-    // On phones the sheet covers the satellite card, so make way for the card.
-    if (window.matchMedia(PHONE_QUERY).matches) setPanelSection(null);
+    if (id !== null && isPhone) setPanelSection(null);
   }
 
   const selected = satellites.find((s) => s.id === selectedId) ?? null;
+  // Opening a drawer section on a phone hides the card but keeps the selection, so the orbit stays
+  // highlighted and the card comes back when the drawer closes.
+  const showCard = selected !== null && !(isPhone && panelSection !== null);
 
   return (
     <main>
@@ -125,7 +131,7 @@ function App({ xrSupported }: AppProps) {
             totalCount={satellites.length}
             loading={loading}
             selectedId={selectedId}
-            onSelect={selectFromList}
+            onSelect={selectSatellite}
           >
             <SatelliteFilterBar
               filters={filters}
@@ -153,7 +159,7 @@ function App({ xrSupported }: AppProps) {
               onFiltersChange: patchFilters,
               onFiltersReset: resetFilters,
             }}
-            onSelect={setSelectedId}
+            onSelect={selectSatellite}
             xr={useXR}
             onPresentingChange={setPresentingXR}
             onXRModesChange={handleXRModes}
@@ -165,11 +171,13 @@ function App({ xrSupported }: AppProps) {
           orbitPathRef={orbitPathRef}
           visibleIds={visibleIds}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={selectSatellite}
         />
       )}
-      {selected && (
+      {showCard && (
         <SatelliteCard
+          // A new selection starts over as a peek.
+          key={selected.id}
           satellite={selected}
           positionsRef={positionsRef}
           onClose={() => setSelectedId(null)}

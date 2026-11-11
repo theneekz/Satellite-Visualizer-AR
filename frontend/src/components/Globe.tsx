@@ -97,11 +97,10 @@ function createEarthTexture(device: GPUDevice, bitmap: ImageBitmap) {
       GPUTextureUsage.COPY_DST |
       GPUTextureUsage.RENDER_ATTACHMENT,
   });
-  device.queue.copyExternalImageToTexture(
-    { source: bitmap },
-    { texture },
-    [width, height]
-  );
+  device.queue.copyExternalImageToTexture({ source: bitmap }, { texture }, [
+    width,
+    height,
+  ]);
   // Level 1 is the largest level drawn here; each later level fits inside its corner.
   const canvas = new OffscreenCanvas(
     Math.max(1, width >> 1),
