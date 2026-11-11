@@ -207,7 +207,7 @@
     left: 0;
     bottom: 48px;
     width: auto;
-    height: calc(100dvh - 64px);
+    height: calc(var(--app-height, 100dvh) - 64px);
     /* The handle supplies the space at the top. The body scrolls, so its content can run right up
        to the navigation bar. */
     padding: 0;

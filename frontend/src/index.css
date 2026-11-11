@@ -7,7 +7,26 @@
     sans-serif;
 }
 
+/* Lets touches pan but not pinch or double-tap zoom the page. The globe reads its own pinch
+   from touch events, which this doesn't block. */
+html {
+  touch-action: pan-x pan-y;
+}
+
+/* Pins the page to the screen so it can never scroll. Without this, iOS Safari scrolls the page
+   to show a focused field above the keyboard and can leave it scrolled after the keyboard
+   closes, which pushes the bottom navigation bar off the screen. */
 body {
+  position: fixed;
+  top: var(--app-top, 0);
+  right: 0;
+  left: 0;
+  /* The visible height from visibleViewport.ts, so Safari's toolbar can't cover the bottom bar. */
+  height: var(--app-height, 100%);
+  overflow: hidden;
+  /* Positions the fixed panels and bars against the body instead of the browser's own idea of
+     the viewport, so they follow --app-height. */
+  contain: layout;
   margin: 0;
   text-align: center;
 }

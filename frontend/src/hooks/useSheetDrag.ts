@@ -81,7 +81,7 @@ export function useSheetDrag({
       sheet.style.transform = `translateY(${deltaY}px)`;
     } else if (canGrow) {
       // Dragging up stretches the sheet, up to the tallest it can be.
-      const maxHeight = window.innerHeight - 64;
+      const maxHeight = document.body.clientHeight - 64;
       sheet.style.transform = "";
       sheet.style.height = `${Math.min(state.startHeight - deltaY, maxHeight)}px`;
     }
