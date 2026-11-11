@@ -9,8 +9,11 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file omm.proto.
  */
-export const file_omm: GenFile = /*@__PURE__*/
-  fileDesc("CglvbW0ucHJvdG8imgMKA09NTRIKCgJpZBgBIAEoDRIMCgRuYW1lGAIgASgJEhIKCmRlc2lnbmF0b3IYAyABKAkSEAoIZXBvY2hfbXMYBCABKAMSEgoKcGVyaW9kX21pbhgFIAEoARIXCg9pbmNsaW5hdGlvbl9kZWcYBiABKAESFAoMZWNjZW50cmljaXR5GAcgASgBEhIKCnBlcmlnZWVfa20YCCABKAESEQoJYXBvZ2VlX2ttGAkgASgBEhMKC21lYW5fbW90aW9uGAogASgBEhAKCHJhYW5fZGVnGAsgASgBEhcKD2FyZ19wZXJpZ2VlX2RlZxgMIAEoARIYChBtZWFuX2Fub21hbHlfZGVnGA0gASgBEg0KBWJzdGFyGA4gASgBEhQKDHJldl9hdF9lcG9jaBgPIAEoDRIYCgtvYmplY3RfdHlwZRgQIAEoCUgAiAEBEhAKA3JjcxgRIAEoCUgBiAEBEhcKCm9yaWdpbmF0b3IYEiABKAlIAogBAUIOCgxfb2JqZWN0X3R5cGVCBgoEX3Jjc0INCgtfb3JpZ2luYXRvciIjCgdPTU1MaXN0EhgKCnNhdGVsbGl0ZXMYASADKAsyBC5PTU1iBnByb3RvMw");
+export const file_omm: GenFile =
+  /*@__PURE__*/
+  fileDesc(
+    "CglvbW0ucHJvdG8imgMKA09NTRIKCgJpZBgBIAEoDRIMCgRuYW1lGAIgASgJEhIKCmRlc2lnbmF0b3IYAyABKAkSEAoIZXBvY2hfbXMYBCABKAMSEgoKcGVyaW9kX21pbhgFIAEoARIXCg9pbmNsaW5hdGlvbl9kZWcYBiABKAESFAoMZWNjZW50cmljaXR5GAcgASgBEhIKCnBlcmlnZWVfa20YCCABKAESEQoJYXBvZ2VlX2ttGAkgASgBEhMKC21lYW5fbW90aW9uGAogASgBEhAKCHJhYW5fZGVnGAsgASgBEhcKD2FyZ19wZXJpZ2VlX2RlZxgMIAEoARIYChBtZWFuX2Fub21hbHlfZGVnGA0gASgBEg0KBWJzdGFyGA4gASgBEhQKDHJldl9hdF9lcG9jaBgPIAEoDRIYCgtvYmplY3RfdHlwZRgQIAEoCUgAiAEBEhAKA3JjcxgRIAEoCUgBiAEBEhcKCm9yaWdpbmF0b3IYEiABKAlIAogBAUIOCgxfb2JqZWN0X3R5cGVCBgoEX3Jjc0INCgtfb3JpZ2luYXRvciIjCgdPTU1MaXN0EhgKCnNhdGVsbGl0ZXMYASADKAsyBC5PTU1iBnByb3RvMw"
+  );
 
 /**
  * Static display info for one OMM record.
@@ -129,7 +132,8 @@ export type OMM = Message<"OMM"> & {
  * Describes the message OMM.
  * Use `create(OMMSchema)` to create a new message.
  */
-export const OMMSchema: GenMessage<OMM> = /*@__PURE__*/
+export const OMMSchema: GenMessage<OMM> =
+  /*@__PURE__*/
   messageDesc(file_omm, 0);
 
 /**
@@ -148,6 +152,6 @@ export type OMMList = Message<"OMMList"> & {
  * Describes the message OMMList.
  * Use `create(OMMListSchema)` to create a new message.
  */
-export const OMMListSchema: GenMessage<OMMList> = /*@__PURE__*/
+export const OMMListSchema: GenMessage<OMMList> =
+  /*@__PURE__*/
   messageDesc(file_omm, 1);
-

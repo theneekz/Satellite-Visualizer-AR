@@ -33,8 +33,7 @@ export interface PropagatorSnapshot {
 }
 
 export type PropagatorResponse =
-  | PropagatorSnapshot
-  | ({ type: "path" } & OrbitPath);
+  PropagatorSnapshot | ({ type: "path" } & OrbitPath);
 
 let satrecs: SatRec[] = [];
 // The NORAD id of satrecs[i].

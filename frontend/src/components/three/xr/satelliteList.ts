@@ -574,7 +574,6 @@ export function createXRSatelliteList(
     drawSlider(ctx);
 
     drawRows(ctx);
-
   }
 
   /** Updates the rows, the count, and whether they are still loading; cheap when unchanged. */
