@@ -1,5 +1,9 @@
 :root {
   color-scheme: light dark;
+  /* The panels' faces, loaded in index.html. Titles, names, and catalog IDs use the display face;
+     everything else uses the text face. */
+  --panel-font-text: "Exo 2", system-ui, sans-serif;
+  --panel-font-display: Oxanium, system-ui, sans-serif;
   font:
     18px/145% system-ui,
     "Segoe UI",

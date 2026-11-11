@@ -9,6 +9,7 @@
   flex-direction: column;
   padding: 16px 0;
   text-align: left;
+  font-family: var(--panel-font-text);
   font-size: 0.8rem;
   line-height: 1.4;
   color: #fff;
@@ -52,12 +53,14 @@
 
 .satellite-card__name {
   margin: 0;
+  font-family: var(--panel-font-display);
   font-size: 1rem;
   font-weight: 600;
 }
 
 .satellite-card__sub {
   margin: 2px 0 0;
+  font-family: var(--panel-font-display);
   color: rgba(255, 255, 255, 0.55);
 }
 

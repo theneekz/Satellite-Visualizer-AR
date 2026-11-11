@@ -3,10 +3,8 @@
   --panel-muted: rgba(255, 255, 255, 0.6);
   --panel-line: rgba(255, 255, 255, 0.08);
   --panel-background: rgba(10, 12, 24, 0.72);
-  /* Section titles, counts, and catalog IDs use the display face; everything else the text face. */
-  --panel-font-display: Oxanium, system-ui, sans-serif;
 
-  font-family: "Exo 2", system-ui, sans-serif;
+  font-family: var(--panel-font-text);
   text-align: left;
   color: #fff;
 }
