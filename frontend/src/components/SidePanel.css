@@ -300,7 +300,7 @@
     bottom: 48px;
     left: 0;
     width: auto;
-    max-height: calc(100dvh - 64px);
+    max-height: calc(var(--app-height, 100dvh) - 64px);
     /* The handle supplies the space at the top. No bottom padding: the content scrolls, so it can
        run right up to the bar. */
     padding: 0 16px;
@@ -329,6 +329,6 @@
   /* The list fills its parent's height, so the Objects sheet needs a definite one. It opens at
      full height, like an expanded satellite card. */
   .side-panel__drawer--full {
-    height: calc(100dvh - 64px);
+    height: calc(var(--app-height, 100dvh) - 64px);
   }
 }

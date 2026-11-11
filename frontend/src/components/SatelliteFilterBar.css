@@ -54,3 +54,10 @@
   border: 0;
   cursor: pointer;
 }
+
+/* iOS Safari zooms the page into any focused field whose text is smaller than 16px. */
+@media (pointer: coarse) {
+  .satellite-filters__control {
+    font-size: 16px;
+  }
+}

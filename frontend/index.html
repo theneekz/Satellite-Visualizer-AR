@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Pinch zoom belongs to the globe, not the page. maximum-scale also stops Safari from
+         zooming in when a text field gains focus. iOS ignores user-scalable=no, so main.tsx
+         blocks the pinch there. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <meta
       name="description"
       content="Explore satellites and other objects orbiting Earth in real time on an interactive 3D globe, on Meta Quest, mobile or web."
