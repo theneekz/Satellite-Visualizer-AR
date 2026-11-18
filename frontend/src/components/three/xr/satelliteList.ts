@@ -209,6 +209,7 @@ export function createXRSatelliteList(
 
   function handleInput() {
     // The system keyboard replaces the whole value each time, so take all of it.
+    if (input.value === searchText) return;
     searchText = input.value;
     if (searchTimer !== null) clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
@@ -218,8 +219,21 @@ export function createXRSatelliteList(
     layer.invalidate();
   }
   function handleFocusChange() {
-    searchFocused = document.activeElement === input;
+    const focused = document.activeElement === input;
+    if (focused === searchFocused) return;
+    searchFocused = focused;
     layer.invalidate();
+  }
+
+  /**
+   * Catches up with the input once a frame. The system keyboard doesn't always fire the events
+   * the handlers listen for: dismissing it can leave the input focused without a blur, and its
+   * text can change without an input event (while composing, for one). Both checks are cheap
+   * and do nothing when the state already matches.
+   */
+  function syncWithInput() {
+    handleFocusChange();
+    handleInput();
   }
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Enter" || e.key === "Escape") input.blur();
@@ -791,7 +805,9 @@ export function createXRSatelliteList(
         break;
       case "search":
         // Focusing during a session brings up the system keyboard; the trigger's release counts
-        // as the user activation it needs.
+        // as the user activation it needs. Dismissing the keyboard can leave the input focused,
+        // and focusing it again would then do nothing, so blur it first to always reopen it.
+        input.blur();
         input.focus();
         break;
       case "clear":
@@ -855,6 +871,7 @@ export function createXRSatelliteList(
     pointerUp,
     cancelPointer,
     update: () => {
+      if (open) syncWithInput();
       layer.update();
       grabBar.update();
     },
