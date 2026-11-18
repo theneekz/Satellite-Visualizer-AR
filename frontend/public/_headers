@@ -10,3 +10,9 @@
   Cache-Control: no-cache
 /index.html
   Cache-Control: no-cache
+
+# Link preview files keep the same name when replaced, so cache them for one day instead of a year.
+/og-image.jpg
+  Cache-Control: public, max-age=86400
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400

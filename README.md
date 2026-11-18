@@ -1,6 +1,6 @@
 # SatViz
 
-https://satellite-visualizer-ar.pages.dev/
+https://satviz.nikosward.com/
 
 Interactive VR/AR/web app for visualizing satellites and man made NEOs (Near Earth Objects) orbiting Earth in real-time.
 
