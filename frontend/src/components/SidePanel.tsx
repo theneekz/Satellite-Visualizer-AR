@@ -7,6 +7,7 @@ import "./SidePanel.css";
 const REPO_URL = "https://github.com/theneekz/Satellite-Visualizer-AR";
 const AUTHOR_URL = "https://www.linkedin.com/in/nsward";
 const DEMO_URL = "https://www.youtube.com/watch?v=2WOAVaL3KC0";
+const SPACEBOOK_URL = "https://spacebook.com";
 
 export type PanelSection = "objects" | "about" | "vr";
 
@@ -142,9 +143,11 @@ function SidePanel({
                 30k+ objects.
               </li>
             </ul>
+            <h3 className="side-panel__subtitle">How does this work?</h3>
             <p className="side-panel__intro">
-              SatViz downloads new tracking data about every 12 hours from
-              Spacebook. Your browser uses that data to work out where each
+              SatViz downloads new tracking data about every 12 hours from{" "}
+              <ExternalLink href={SPACEBOOK_URL}>Spacebook</ExternalLink>. Your
+              browser uses that data to work out where each
               object is at this moment.
             </p>
             <p className="side-panel__intro">
