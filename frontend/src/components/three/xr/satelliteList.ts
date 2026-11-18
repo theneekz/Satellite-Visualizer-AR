@@ -35,13 +35,16 @@ import {
 
 // Layout, in layout pixels. Rows are taller than the page's 34px so a ray can pick one easily.
 const WIDTH = 400;
-const HEIGHT = 860;
+// Taller than before by the count line, so the rows keep their height.
+const HEIGHT = 860 + 4 + Math.ceil(TEXT_SIZE * LINE_HEIGHT);
 const INNER_WIDTH = WIDTH - 2 * PADDING;
 const CLOSE_X = WIDTH - PADDING - CLOSE_SIZE;
 const CLOSE_Y = PADDING;
 // 0.85rem, the page's control and row text.
 const CONTROL_TEXT_SIZE = 15.3;
-const SEARCH_TOP = PADDING + CLOSE_SIZE + 12;
+// The count sits on its own line under the title, so a long count never truncates the title.
+const COUNT_TOP = PADDING + CLOSE_SIZE + 4;
+const SEARCH_TOP = COUNT_TOP + Math.ceil(TEXT_SIZE * LINE_HEIGHT) + 12;
 const SEARCH_HEIGHT = 40;
 const FIELD_GAP = 12;
 const LABEL_HEIGHT = TEXT_SIZE * LINE_HEIGHT;
@@ -521,16 +524,11 @@ export function createXRSatelliteList(
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Header: the title with the count, as on the page, and the close button.
-    const title = loading
-      ? "Artificial Space Objects"
-      : satellites.length === totalCount
-        ? `Artificial Space Objects (${formatCount(totalCount)})`
-        : `Artificial Space Objects (${formatCount(satellites.length)} of ${formatCount(totalCount)})`;
+    // Header: the title and the close button, with the count on the line below.
     ctx.fillStyle = COLORS.text;
     drawText(
       ctx,
-      title,
+      "Artificial Space Objects",
       PADDING,
       CLOSE_Y + (CLOSE_SIZE - TITLE_SIZE * LINE_HEIGHT) / 2,
       TITLE_SIZE,
@@ -538,6 +536,14 @@ export function createXRSatelliteList(
       CLOSE_X - 8 - PADDING
     );
     drawCloseButton(ctx, CLOSE_X, CLOSE_Y, hoveredKey === "close");
+    if (!loading) {
+      const count =
+        satellites.length === totalCount
+          ? `${formatCount(totalCount)} objects`
+          : `${formatCount(satellites.length)} of ${formatCount(totalCount)} objects`;
+      ctx.fillStyle = COLORS.muted;
+      drawText(ctx, count, PADDING, COUNT_TOP, TEXT_SIZE, undefined, INNER_WIDTH);
+    }
 
     drawSearch(ctx);
 
