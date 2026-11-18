@@ -6,6 +6,8 @@ Interactive VR/AR/web app for visualizing satellites and man made NEOs (Near Ear
 
 Demo of AR functionality: https://www.youtube.com/watch?v=2WOAVaL3KC0
 
+<img width="560" alt="SatViz in AR: a 3D globe ringed by yellow satellite dots, floating in a room" src="docs/media/ar-demo.gif" />
+
 <img width="480" height="480" alt="satviz" src="https://github.com/user-attachments/assets/8b941c1f-8cd3-4209-9a7f-afa6783933ec" />
 
 ## Features
