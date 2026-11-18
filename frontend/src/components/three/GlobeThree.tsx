@@ -33,6 +33,7 @@ import { createEarth } from "./earth";
 import { createOrbitPath } from "./orbitPath";
 import { createSatellites } from "./satellites";
 import { TouchPoints } from "../touchPoints";
+import { METERS_PER_PIXEL } from "./xr/panelStyle";
 import {
   createXRSatelliteCard,
   type XRSatelliteCard,
@@ -104,6 +105,9 @@ const XR_CLICK_MAX_ANGLE_RAD = 0.05;
 const XR_PANEL_PUSH_SPEED = 1.5;
 const XR_PANEL_MIN_DISTANCE_M = 0.3;
 const XR_PANEL_MAX_DISTANCE_M = 4;
+// Phone AR has no controllers, only touches on the screen. A touch on the list that moves more
+// than this many layout pixels (about a third of a row) scrolls the list instead of pressing.
+const XR_TOUCH_SCROLL_SLOP_PX = 8;
 
 /**
  * The yaw and pitch that turn the point (sx, sy, sz), in the globe's unrotated frame, toward the
@@ -154,7 +158,9 @@ export interface XRListProps {
  * With `xr`, the renderer is forced onto WebGL 2 (headset browsers lack WebGPU XR bindings) and
  * the page offers buttons to enter an immersive VR or AR (passthrough) session. In a session the
  * globe floats in the room: the thumbstick spins and zooms it, dragging with the trigger held turns
- * it, and a trigger click selects the satellite a controller points at.
+ * it, and a trigger click selects the satellite a controller points at. In phone AR, where touches
+ * on the screen stand in for controllers, a finger drags and taps the same way, a two-finger pinch
+ * zooms, dragging along the list scrolls it, and tapping empty space reopens a closed list.
  *
  * Scene graph, mirroring the WebGPU renderer's frames:
  *   scene
@@ -450,6 +456,7 @@ function GlobeThree({
     const rayOrigin = new Vector3();
     const rayDirection = new Vector3();
     const headDirection = new Vector3();
+    const otherRayDirection = new Vector3();
 
     const grabPoint = new Vector3();
     const panelGrabPoint = new Vector3();
@@ -470,6 +477,8 @@ function GlobeThree({
       last: Vector3;
       pickedId: number | null;
       moved: boolean;
+      // Whether a touch on a phone's screen, rather than a controller, started the drag.
+      touch: boolean;
     } | null = null;
 
     /** Where the controller's ray is the given distance out, in world space. */
@@ -481,7 +490,18 @@ function GlobeThree({
 
     // A trigger press that started on a panel, and what it pressed. The card acts on release if
     // the ray is still on that part, like a button on the page; the list handles its own presses.
-    let panelPress: { controller: Group; hit: PanelHit } | null = null;
+    // A touch on the list (phone AR) can turn into a scroll instead: `touchY` is where it last met
+    // the list, as a height on the panel in meters, and is null for controller presses.
+    let panelPress: {
+      controller: Group;
+      hit: PanelHit;
+      touchY: number | null;
+      scrolling: boolean;
+    } | null = null;
+    // The touches on a phone's screen that are down (phone AR), and the two-finger pinch that
+    // zooms the globe, with the angle between the two touches' rays last frame.
+    const screenTouches = new Set<Group>();
+    let pinch: { a: Group; b: Group; lastAngle: number } | null = null;
     // The controller dragging a panel by its grab bar. As with the globe, the grab point is carried
     // at a fixed distance along the ray; the panel turns to face the head and sits so the spot
     // grabbed (in the panel's own space) stays on it.
@@ -519,8 +539,67 @@ function GlobeThree({
       list.setOpen(open);
     }
 
+    /** Whether the controller is a touch on a phone's screen (phone AR), not a real controller. */
+    function isTouch(controller: Group) {
+      return inputSources.get(controller)?.targetRayMode === "screen";
+    }
+
+    /**
+     * Starts a two-finger pinch, which zooms the globe. It replaces whatever the first finger was
+     * doing, so the pinch doesn't also turn the globe, move a panel, or press the list.
+     */
+    function startPinch(a: Group, b: Group) {
+      if (panelPress?.hit.panel === "list") list?.cancelPointer();
+      panelPress = null;
+      panelDrag = null;
+      xrDrag = null;
+      pinch = { a, b, lastAngle: angleBetweenRays(a, b) };
+    }
+
+    /** The angle between two controllers' rays, in radians. */
+    function angleBetweenRays(a: Group, b: Group) {
+      a.updateMatrixWorld();
+      b.updateMatrixWorld();
+      rayDirection.set(0, 0, -1).transformDirection(a.matrixWorld);
+      otherRayDirection.set(0, 0, -1).transformDirection(b.matrixWorld);
+      return rayDirection.angleTo(otherRayDirection);
+    }
+
+    /**
+     * Zooms the globe by how much the pinch spread or closed since the last frame. A touch's ray
+     * runs from the phone's camera through the finger, so the angle between the two rays grows in
+     * proportion to the distance between the fingers on the screen.
+     */
+    function handlePinch() {
+      if (!pinch) return;
+      const angle = angleBetweenRays(pinch.a, pinch.b);
+      // Fingers that start (nearly) together give no scale to compare against.
+      if (pinch.lastAngle > 1e-4 && angle > 1e-4) {
+        zoomPercent = Math.min(
+          XR_ZOOM_MAX_PERCENT,
+          Math.max(ZOOM_MIN_PERCENT, zoomPercent * (angle / pinch.lastAngle))
+        );
+      }
+      pinch.lastAngle = angle;
+    }
+
     function handleXRSelectStart(event: Event & { target: Group }) {
       const controller = event.target;
+      // three.js updates the controller's pose for this event but not its world matrix, which
+      // `panelHit` reads. Without this, a touch on a phone would test where the previous touch
+      // was. On a headset it only moves the test to the press's own pose, a frame fresher.
+      controller.updateMatrixWorld();
+      const touch = isTouch(controller);
+      if (touch) {
+        screenTouches.add(controller);
+        if (screenTouches.size === 2) {
+          const [a, b] = screenTouches;
+          startPinch(a, b);
+          return;
+        }
+        // A third finger does nothing.
+        if (screenTouches.size > 2) return;
+      }
       // Panels are in front of the globe, so they get the press first.
       const hit = panelHit(controller);
       if (hit?.region === "grab") {
@@ -535,7 +614,12 @@ function GlobeThree({
       if (hit) {
         // One panel press at a time; a press with the other controller replaces it.
         if (panelPress?.hit.panel === "list") list?.cancelPointer();
-        panelPress = { controller, hit };
+        panelPress = {
+          controller,
+          hit,
+          touchY: touch && hit.panel === "list" ? hit.local.y : null,
+          scrolling: false,
+        };
         if (hit.panel === "list") list!.pointerDown(hit);
         return;
       }
@@ -553,17 +637,28 @@ function GlobeThree({
         last: start.clone(),
         pickedId: pickWithController(controller),
         moved: false,
+        touch,
       };
     }
 
     function handleXRSelectEnd(event: Event & { target: Group }) {
+      // As at the press, refresh the world matrix that `panelHit` reads.
+      event.target.updateMatrixWorld();
+      screenTouches.delete(event.target);
+      if (pinch && (pinch.a === event.target || pinch.b === event.target)) {
+        // The finger left down does nothing until it lifts too.
+        pinch = null;
+        return;
+      }
       if (panelDrag?.controller === event.target) {
         panelDrag = null;
         return;
       }
       if (panelPress?.controller === event.target) {
-        const pressed = panelPress.hit;
+        const { hit: pressed, scrolling } = panelPress;
         panelPress = null;
+        // A touch that scrolled the list already dropped its press.
+        if (scrolling) return;
         const hit = panelHit(event.target);
         if (pressed.panel === "list") {
           list?.pointerUp(hit?.panel === "list" ? hit : null);
@@ -583,9 +678,12 @@ function GlobeThree({
         return;
       }
       if (xrDrag?.controller !== event.target) return;
-      const { moved, pickedId } = xrDrag;
+      const { moved, pickedId, touch } = xrDrag;
       xrDrag = null;
       if (moved) return;
+      // A phone has no button to bring back a closed list, so tapping empty space reopens it.
+      if (touch && pickedId === null && list && !list.isOpen())
+        setListOpen(true);
       // Like a click: a hit turns the satellite toward the user, a miss clears the selection.
       if (pickedId !== null) following = true;
       selectedIdRef.current = pickedId;
@@ -687,9 +785,12 @@ function GlobeThree({
       controller.addEventListener("connected", (e) =>
         inputSources.set(controller, e.data)
       );
-      controller.addEventListener("disconnected", () =>
-        inputSources.delete(controller)
-      );
+      controller.addEventListener("disconnected", () => {
+        inputSources.delete(controller);
+        // A phone's touches disconnect when lifted; this covers one lifted without a selectend.
+        screenTouches.delete(controller);
+        if (pinch?.a === controller || pinch?.b === controller) pinch = null;
+      });
       controller.addEventListener("selectstart", handleXRSelectStart);
       controller.addEventListener("selectend", handleXRSelectEnd);
       scene.add(controller);
@@ -814,7 +915,28 @@ function GlobeThree({
       // A held press on the list follows the ray, for dragging the year slider.
       if (panelPress?.hit.panel === "list") {
         const hit = panelHit(panelPress.controller);
-        list.pointerMove(hit?.panel === "list" ? hit : null);
+        const onList = hit?.panel === "list" ? hit : null;
+        // A touch (phone AR) that drags along the list scrolls it, like a list on the phone's
+        // own screen. Dragging the year slider still moves its handle instead.
+        if (
+          panelPress.touchY !== null &&
+          panelPress.hit.target?.kind !== "slider" &&
+          onList
+        ) {
+          const dy = (onList.local.y - panelPress.touchY) / METERS_PER_PIXEL;
+          if (!panelPress.scrolling && Math.abs(dy) > XR_TOUCH_SCROLL_SLOP_PX) {
+            panelPress.scrolling = true;
+            // The press becomes a scroll, so lifting the finger won't select a row.
+            list.cancelPointer();
+          }
+          if (panelPress.scrolling) {
+            // Panel heights grow upward and the list scrolls downward, so a finger moving up
+            // brings later rows into view.
+            list.scrollBy(dy);
+            panelPress.touchY = onList.local.y;
+          }
+        }
+        if (!panelPress.scrolling) list.pointerMove(onList);
       }
       const satellite = selectedSatelliteRef.current;
       if (satellite !== cardSatellite) {
@@ -863,6 +985,8 @@ function GlobeThree({
       xrDrag = null;
       panelPress = null;
       panelDrag = null;
+      pinch = null;
+      screenTouches.clear();
       // Off the headset the page shows its own card.
       card?.show(null);
       cardSatellite = null;
@@ -954,6 +1078,7 @@ function GlobeThree({
         handleThumbsticks(Math.min(frameDt, 0.1));
         handleXRDrag();
         handlePanelDrag();
+        handlePinch();
       }
 
       // Selecting a satellite turns the camera so it is centered, then keeps it there as it
