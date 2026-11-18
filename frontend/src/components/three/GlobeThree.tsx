@@ -93,9 +93,9 @@ const XR_LIST_HEIGHT_M = XR_CARD_HEIGHT_M;
 // Full thumbstick deflection, with the ray on the list, scrolls it this many layout pixels per
 // second (about 50 rows). The deflection is squared, so a light push scrolls slowly.
 const XR_LIST_SCROLL_SPEED = 2000;
-// The xr-standard gamepad index of the left controller's Y button, which toggles the list until
-// the hand menu exists.
-const XR_Y_BUTTON = 5;
+// The xr-standard gamepad index of the upper face button: B on the right controller and Y on the
+// left. Either one toggles the list until the hand menu exists.
+const XR_LIST_TOGGLE_BUTTON = 5;
 // A trigger press whose grab point moves less than this angle (about 3 degrees, as seen from the
 // controller) counts as a click, not a drag. Squeezing a trigger dips the controller a little.
 const XR_CLICK_MAX_ANGLE_RAD = 0.05;
@@ -696,17 +696,22 @@ function GlobeThree({
       return controller;
     });
 
-    // Whether each controller's Y button was down last frame, so a press toggles the list once.
-    const yButtonDown = new Map<Group, boolean>();
+    // Whether each hand's toggle button was down last frame, so a press toggles the list once.
+    const toggleButtonDown = new Map<XRHandedness, boolean>();
 
-    /** The left controller's Y button opens and closes the list. */
+    /** The B button (right controller) or Y button (left controller) opens and closes the list. */
     function handleButtons() {
-      for (const [controller, source] of inputSources) {
-        if (source.handedness !== "left") continue;
-        const down = source.gamepad?.buttons[XR_Y_BUTTON]?.pressed ?? false;
-        if (down && !yButtonDown.get(controller) && list)
+      // Read the session's input sources each frame instead of the ones cached at "connected",
+      // so a source the browser replaces mid-session still works.
+      const sources = renderer.xr.getSession()?.inputSources;
+      if (!sources) return;
+      for (const source of sources) {
+        if (source.handedness === "none") continue;
+        const down =
+          source.gamepad?.buttons[XR_LIST_TOGGLE_BUTTON]?.pressed ?? false;
+        if (down && !toggleButtonDown.get(source.handedness) && list)
           setListOpen(!list.isOpen());
-        yButtonDown.set(controller, down);
+        toggleButtonDown.set(source.handedness, down);
       }
     }
 
@@ -862,7 +867,7 @@ function GlobeThree({
       card?.show(null);
       cardSatellite = null;
       list?.setOpen(false);
-      yButtonDown.clear();
+      toggleButtonDown.clear();
       scene.background = background;
       stage.position.set(0, 0, 0);
       stage.scale.setScalar(1);
