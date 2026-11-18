@@ -42,7 +42,7 @@ import { sunDirection } from "../sun";
 
 // In XR, satellites are sized by angle rather than pixels: this is the square's full width, about
 // what SATELLITE_SIZE_PX spans on a desktop screen.
-const SATELLITE_SIZE_XR_RAD = 0.01;
+const SATELLITE_SIZE_XR_RAD = 0.004;
 // An XR controller ray selects the satellite nearest its aim within this angle (about 1.5 degrees).
 const PICK_RAY_ANGLE_RAD = 0.026;
 

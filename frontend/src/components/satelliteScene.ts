@@ -6,7 +6,7 @@ import { EARTH_RADIUS_KM } from "../constants";
  * renderer (three/satellites.ts), so both draw and pick satellites the same way.
  */
 
-export const SATELLITE_SIZE_PX = 12;
+export const SATELLITE_SIZE_PX = 5;
 // A click selects the nearest satellite within this many pixels.
 export const PICK_RADIUS_PX = 10;
 // The selected satellite's highlight color, so its orbit reads as part of the selection.
