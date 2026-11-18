@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- iOS uses this icon for Add to Home Screen, and iMessage can fall back to it. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Pinch zoom belongs to the globe, not the page. maximum-scale also stops Safari from
          zooming in when a text field gains focus. iOS ignores user-scalable=no, so main.tsx
          blocks the pinch there. -->
@@ -14,7 +16,45 @@
       name="description"
       content="Explore satellites and other objects orbiting Earth in real time on an interactive 3D globe, on Meta Quest, mobile or web."
     />
-    <title>SatViz</title>
+    <title>SatViz: Real-time 3D satellite tracker for web, AR, and VR</title>
+    <!-- The same site also answers on satellite-visualizer-ar.pages.dev. The canonical URL tells
+         search engines to rank this domain and treat the other as a copy. -->
+    <link rel="canonical" href="https://satviz.nikosward.com/" />
+    <!-- Link previews in iOS Messages, LinkedIn, WhatsApp, Slack, and others. Their crawlers
+         don't run JavaScript, so these tags must stay in this static file. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SatViz" />
+    <meta property="og:title" content="SatViz: Real-time 3D satellite tracker" />
+    <meta
+      property="og:description"
+      content="Explore satellites and other objects orbiting Earth in real time on an interactive 3D globe, on Meta Quest, mobile or web."
+    />
+    <meta property="og:url" content="https://satviz.nikosward.com/" />
+    <!-- Preview crawlers need an absolute image URL. WhatsApp may skip images over ~300 KB. -->
+    <meta property="og:image" content="https://satviz.nikosward.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="A 3D globe of North America surrounded by thousands of yellow satellite dots"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- Tells search engines this page is a free web app, which can show in search results. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "SatViz",
+        "url": "https://satviz.nikosward.com/",
+        "description": "Explore satellites and other objects orbiting Earth in real time on an interactive 3D globe, on Meta Quest, mobile or web.",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires WebGL. AR and VR need a WebXR browser.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Niko Sward", "url": "https://nikosward.com/" }
+      }
+    </script>
     <!-- The navigation's fonts. swap shows fallback text at once instead of waiting on them. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
