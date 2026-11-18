@@ -47,9 +47,11 @@ function App({ xrSupported }: AppProps) {
   const [filters, setFilters] = useState<SatelliteFilters>(DEFAULT_FILTERS);
   // While an XR session runs, the headset shows its own list, so the page's isn't mounted.
   const [presentingXR, setPresentingXR] = useState(false);
-  // The open navigation section, or null when the drawer is closed.
+  // The open navigation section, or null when the drawer is closed. Headsets start on VR/AR so
+  // the Enter VR and Enter AR buttons show right away; browsers only start an immersive session
+  // from a user's tap or click, so the page can't open it on its own.
   const [panelSection, setPanelSection] = useState<PanelSection | null>(
-    "about"
+    xrSupported ? "vr" : "about"
   );
   // How to enter VR or AR, once the XR globe knows which modes this device supports.
   const [xrControls, setXRControls] = useState<XRControls | null>(null);
