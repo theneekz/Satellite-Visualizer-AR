@@ -322,6 +322,11 @@
     overflow-y: auto;
     /* Keeps a scroll that reaches the end from moving the page, which can pull to refresh. */
     overscroll-behavior: contain;
+    /* A scroll container clips its sides too, which would cut off the
+       focus ring (2px outline + 2px offset). The padding gives the ring
+       room, and the negative margin keeps the content where it was. */
+    margin: 0 -4px;
+    padding: 0 4px;
   }
 
   /* The list fills its parent's height, so the Objects sheet needs a definite one. It opens at

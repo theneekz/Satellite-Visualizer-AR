@@ -65,14 +65,34 @@ function SatelliteFilterBar({
 
   return (
     <div className="satellite-filters">
-      <input
-        type="search"
-        className="satellite-filters__control"
-        placeholder="Search name or ID"
-        aria-label="Search by name or ID"
-        value={queryInput}
-        onChange={(e) => setQueryInput(e.target.value)}
-      />
+      {/* A custom clear button, because iOS Safari doesn't show the
+          native one on search fields. */}
+      <div className="satellite-filters__search">
+        <input
+          type="search"
+          className="satellite-filters__control"
+          placeholder="Search name or ID"
+          aria-label="Search by name or ID"
+          value={queryInput}
+          onChange={(e) => setQueryInput(e.target.value)}
+        />
+        {queryInput !== "" && (
+          <button
+            type="button"
+            className="satellite-filters__clear"
+            aria-label="Clear search"
+            onClick={() => {
+              setQueryInput("");
+              // Apply now instead of waiting for the debounce.
+              onChange({ query: "" });
+            }}
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        )}
+      </div>
       <div className="satellite-filters__row">
         <label className="satellite-filters__field">
           Type
