@@ -10,7 +10,7 @@ import type { Message, UnknownEnum } from "@bufbuild/protobuf";
  * Describes the file omm.proto.
  */
 export const file_omm: GenFile = /*@__PURE__*/
-  fileDesc("CglvbW0ucHJvdG8izgMKA09NTRIKCgJpZBgBIAEoDRIMCgRuYW1lGAIgASgJEhIKCmRlc2lnbmF0b3IYAyABKAkSEAoIZXBvY2hfbXMYBCABKAMSEgoKcGVyaW9kX21pbhgFIAEoARIXCg9pbmNsaW5hdGlvbl9kZWcYBiABKAESFAoMZWNjZW50cmljaXR5GAcgASgBEhIKCnBlcmlnZWVfa20YCCABKAESEQoJYXBvZ2VlX2ttGAkgASgBEhMKC21lYW5fbW90aW9uGAogASgBEhAKCHJhYW5fZGVnGAsgASgBEhcKD2FyZ19wZXJpZ2VlX2RlZxgMIAEoARIYChBtZWFuX2Fub21hbHlfZGVnGA0gASgBEg0KBWJzdGFyGA4gASgBEhQKDHJldl9hdF9lcG9jaBgPIAEoDRIjChJvYmplY3RfdHlwZV9sZWdhY3kYECABKAlCAhgBSACIAQESEAoDcmNzGBEgASgJSAGIAQESFwoKb3JpZ2luYXRvchgSIAEoCUgCiAEBEiAKC29iamVjdF90eXBlGBMgASgOMgsuT2JqZWN0VHlwZUIVChNfb2JqZWN0X3R5cGVfbGVnYWN5QgYKBF9yY3NCDQoLX29yaWdpbmF0b3IiIwoHT01NTGlzdBIYCgpzYXRlbGxpdGVzGAEgAygLMgQuT01NKncKCk9iamVjdFR5cGUSGwoXT0JKRUNUX1RZUEVfVU5TUEVDSUZJRUQQABIXChNPQkpFQ1RfVFlQRV9QQVlMT0FEEAESGwoXT0JKRUNUX1RZUEVfUk9DS0VUX0JPRFkQAhIWChJPQkpFQ1RfVFlQRV9ERUJSSVMQA2IGcHJvdG8z");
+  fileDesc("CglvbW0ucHJvdG8irAMKA09NTRIKCgJpZBgBIAEoDRIMCgRuYW1lGAIgASgJEhIKCmRlc2lnbmF0b3IYAyABKAkSEAoIZXBvY2hfbXMYBCABKAMSEgoKcGVyaW9kX21pbhgFIAEoARIXCg9pbmNsaW5hdGlvbl9kZWcYBiABKAESFAoMZWNjZW50cmljaXR5GAcgASgBEhIKCnBlcmlnZWVfa20YCCABKAESEQoJYXBvZ2VlX2ttGAkgASgBEhMKC21lYW5fbW90aW9uGAogASgBEhAKCHJhYW5fZGVnGAsgASgBEhcKD2FyZ19wZXJpZ2VlX2RlZxgMIAEoARIYChBtZWFuX2Fub21hbHlfZGVnGA0gASgBEg0KBWJzdGFyGA4gASgBEhQKDHJldl9hdF9lcG9jaBgPIAEoDRIQCgNyY3MYESABKAlIAIgBARIXCgpvcmlnaW5hdG9yGBIgASgJSAGIAQESIAoLb2JqZWN0X3R5cGUYEyABKA4yCy5PYmplY3RUeXBlQgYKBF9yY3NCDQoLX29yaWdpbmF0b3JKBAgQEBFSEm9iamVjdF90eXBlX2xlZ2FjeSIjCgdPTU1MaXN0EhgKCnNhdGVsbGl0ZXMYASADKAsyBC5PTU0qdwoKT2JqZWN0VHlwZRIbChdPQkpFQ1RfVFlQRV9VTlNQRUNJRklFRBAAEhcKE09CSkVDVF9UWVBFX1BBWUxPQUQQARIbChdPQkpFQ1RfVFlQRV9ST0NLRVRfQk9EWRACEhYKEk9CSkVDVF9UWVBFX0RFQlJJUxADYgZwcm90bzM");
 
 /**
  * Static display info for one OMM record.
@@ -106,16 +106,6 @@ export type OMM = Message<"OMM"> & {
    * @generated from field: uint32 rev_at_epoch = 15;
    */
   revAtEpoch: number;
-
-  /**
-   * Deprecated: replaced by object_type (field 19). The publish job still
-   * writes it so that clients built before the enum keep working. Once every
-   * client reads field 19, stop writing it and reserve 16.
-   *
-   * @generated from field: optional string object_type_legacy = 16 [deprecated = true];
-   * @deprecated
-   */
-  objectTypeLegacy?: string | undefined;
 
   /**
    * Optional: not present in every OMM source.

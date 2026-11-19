@@ -98,29 +98,14 @@ export const OBJECT_TYPE_NAMES: Record<ObjectType, string> = {
   [ObjectType.DEBRIS]: "DEBRIS",
 };
 
-// The deprecated OMM OBJECT_TYPE strings, for payloads published before the
-// ObjectType enum.
-const LEGACY_OBJECT_TYPES: Record<string, ObjectType> = {
-  PAYLOAD: ObjectType.PAYLOAD,
-  "ROCKET BODY": ObjectType.ROCKET_BODY,
-  DEBRIS: ObjectType.DEBRIS,
-};
-
 /**
  * The satellite's type, always one this build knows, so it's a valid color
  * index. A value added to the proto after this build counts as UNSPECIFIED.
- * Payloads published before the enum only have the legacy string; remove that
- * fallback once every published payload has field 19.
  */
 function objectTypeOf(omm: OMM): ObjectType {
-  if (omm.objectType !== ObjectType.UNSPECIFIED) {
-    return omm.objectType in OBJECT_TYPE_NAMES
-      ? omm.objectType
-      : ObjectType.UNSPECIFIED;
-  }
-  return (
-    LEGACY_OBJECT_TYPES[omm.objectTypeLegacy ?? ""] ?? ObjectType.UNSPECIFIED
-  );
+  return omm.objectType in OBJECT_TYPE_NAMES
+    ? omm.objectType
+    : ObjectType.UNSPECIFIED;
 }
 
 /** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */

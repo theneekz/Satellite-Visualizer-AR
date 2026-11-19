@@ -98,14 +98,10 @@ def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
         omm.mean_anomaly_deg = record["MEAN_ANOMALY"]
         omm.bstar = record["BSTAR"]
         omm.rev_at_epoch = record["REV_AT_EPOCH"]
+        omm.object_type = OBJECT_TYPES.get(
+            record.get("OBJECT_TYPE") or "", omm_pb2.OBJECT_TYPE_UNSPECIFIED)
         # Optional: not present in every OMM source. proto3 optional fields are left unset
         # rather than assigned None.
-        # An unset object_type reads as 0, OBJECT_TYPE_UNSPECIFIED.
-        object_type = record.get("OBJECT_TYPE")
-        if object_type is not None:
-            omm.object_type = OBJECT_TYPES.get(
-                object_type, omm_pb2.OBJECT_TYPE_UNSPECIFIED)
-            omm.object_type_legacy = object_type
         if record.get("RCS") is not None:
             omm.rcs = record["RCS"]
         if record.get("ORIGINATOR") is not None:

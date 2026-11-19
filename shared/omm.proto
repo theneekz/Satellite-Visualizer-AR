@@ -18,10 +18,9 @@ message OMM {
   double bstar = 14;
   uint32 rev_at_epoch = 15;
 
-  // Deprecated: replaced by object_type (field 19). The publish job still
-  // writes it so that clients built before the enum keep working. Once every
-  // client reads field 19, stop writing it and reserve 16.
-  optional string object_type_legacy = 16 [deprecated = true];
+  // Was the OBJECT_TYPE string, replaced by the object_type enum (field 19).
+  reserved 16;
+  reserved "object_type_legacy";
   // Optional: not present in every OMM source.
   optional string rcs = 17;
   optional string originator = 18;
