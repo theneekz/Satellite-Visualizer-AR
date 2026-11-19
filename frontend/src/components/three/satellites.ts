@@ -10,6 +10,7 @@ import {
   Vector2,
   Vector3,
   type Matrix4,
+  type Node,
 } from "three/webgpu";
 import {
   attribute,
@@ -30,7 +31,11 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../../api/satellites";
-import { EARTH_RADIUS_KM, SATELLITE_SHADOW_BRIGHTNESS } from "../../constants";
+import {
+  EARTH_RADIUS_KM,
+  SATELLITE_SHADOW_BRIGHTNESS,
+  SATELLITE_TYPE_COLORS,
+} from "../../constants";
 import {
   SATELLITE_SIZE_PX,
   pickNearest,
@@ -107,12 +112,28 @@ export function createSatellites() {
     select(inShadow, float(SATELLITE_SHADOW_BRIGHTNESS), float(1))
   );
 
+  // The color for the instance's ObjectType, as a chain of selects: with a
+  // handful of types this is simpler than a uniform array. An out-of-range
+  // value gets the last color.
+  const objectType = attribute("satObjectType", "float");
+  const [lastR, lastG, lastB] = SATELLITE_TYPE_COLORS.at(-1)!;
+  let typeColorNode: Node<"vec3"> = vec3(lastR, lastG, lastB);
+  for (let i = SATELLITE_TYPE_COLORS.length - 2; i >= 0; i--) {
+    const [r, g, b] = SATELLITE_TYPE_COLORS[i];
+    typeColorNode = select(
+      objectType.lessThan(i + 0.5),
+      vec3(r, g, b),
+      typeColorNode
+    );
+  }
+  const typeColor = varying(typeColorNode);
+
   const material = new MeshBasicNodeMaterial({ side: DoubleSide });
   material.vertexNode = vec4(clip.xy.add(offset), clip.z, clip.w);
   material.colorNode = select(
     varying(select(isSelected, float(1), float(0))).greaterThan(0.5),
     vec3(0.52, 0.72, 0.92),
-    vec3(1, 0.85, 0.2).mul(shade)
+    typeColor.mul(shade)
   );
 
   let capacity = 0;
@@ -137,6 +158,10 @@ export function createSatellites() {
     geometry.setAttribute(
       "satVelocity",
       new InterleavedBufferAttribute(instanceBuffer, 3, 3)
+    );
+    geometry.setAttribute(
+      "satObjectType",
+      new InterleavedBufferAttribute(instanceBuffer, 1, 6)
     );
     geometry.instanceCount = 0;
     capacity = instances;

@@ -37,13 +37,17 @@ export interface SatelliteInfo {
   originator: string | null;
 }
 
-// Floats per satellite in the state block: position (3) + velocity (3).
-export const FLOATS_PER_SATELLITE = 6;
+// Floats per satellite in the state block: position (3) + velocity (3) +
+// ObjectType (1). The type rides along with each snapshot because the worker
+// drops satellites SGP4 can't propagate and filtering reorders them, so a
+// separate per-satellite array wouldn't stay lined up.
+export const FLOATS_PER_SATELLITE = 7;
 
 /**
  * Every satellite's state at `t` (Unix epoch milliseconds, UTC), propagated in the browser by
  * usePropagatedPositions. `ids[i]` is the NORAD id whose TEME state (x, y, z km, vx, vy, vz km/s)
- * is `state[i * 6 .. i * 6 + 6]`.
+ * is `state[i * 7 .. i * 7 + 6]`, followed by its ObjectType, which the
+ * shaders use as a color index.
  */
 export interface PositionsSnapshot {
   t: number;
