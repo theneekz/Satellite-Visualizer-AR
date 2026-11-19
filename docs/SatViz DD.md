@@ -14,7 +14,7 @@ The frontend is React + TypeScript (Vite) with a hand-written WebGPU renderer fo
 
 ### Data Loading
 
-`api/satellites.ts` owns the one endpoint. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` by protoc-gen-es with `target=ts,erasable_syntax=true`, because the tsconfig sets `erasableSyntaxOnly`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. `object_type` is the `ObjectType` enum (field 19), with `UNSPECIFIED` for both OMM's `UNKNOWN` and a missing type (shown as Unknown). Field 16, the old `object_type` string, is reserved so it can't be reused. Satellites load once on mount, with an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
+`api/satellites.ts` owns the one endpoint. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` by protoc-gen-es with `target=ts,erasable_syntax=true`, because the tsconfig sets `erasableSyntaxOnly`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. `object_type` is the `ObjectType` enum (field 19), with `UNSPECIFIED` for both OMM's `UNKNOWN` and a missing type (shown as Unknown). `rcs` is the `RcsSize` enum (field 20), with `UNSPECIFIED` when the source gives no size; the card shows no size badge for it, and the size filter lists it as Unknown. Until every published payload has field 20, it falls back to the deprecated `rcs_legacy` string in field 17. Field 16, the old `object_type` string, is reserved so it can't be reused. Satellites load once on mount, with an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
 
 ### Propagation
 
@@ -140,4 +140,4 @@ Skyfield can compute a precise Sun position but needs a JPL ephemeris file (abou
 
 ## Future Work
 
-A legend for the object type colors. Element set history (dated payloads in R2), satcat join for country and launch data, pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.
+A legend for the object type colors. Removing the deprecated `rcs_legacy` string (field 17) once every published payload has the `RcsSize` enum (field 20): stop writing it in the backend, reserve 17 in the proto, and remove the frontend fallback. Element set history (dated payloads in R2), satcat join for country and launch data, pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.

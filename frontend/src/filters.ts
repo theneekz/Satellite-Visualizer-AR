@@ -1,4 +1,8 @@
-import { OBJECT_TYPE_NAMES, type SatelliteInfo } from "./api/satellites";
+import {
+  OBJECT_TYPE_NAMES,
+  RCS_SIZE_NAMES,
+  type SatelliteInfo,
+} from "./api/satellites";
 import { getLaunchYear } from "./utilities";
 
 export interface SatelliteFilters {
@@ -30,7 +34,8 @@ const SIZE_ORDER = ["SMALL", "MEDIUM", "LARGE"];
 // Records from sources without these fields count as UNKNOWN.
 export const typeOf = (satellite: SatelliteInfo) =>
   OBJECT_TYPE_NAMES[satellite.object_type];
-export const sizeOf = (satellite: SatelliteInfo) => satellite.rcs ?? "UNKNOWN";
+export const sizeOf = (satellite: SatelliteInfo) =>
+  RCS_SIZE_NAMES[satellite.rcs];
 
 export function isFiltering(filters: SatelliteFilters) {
   return (

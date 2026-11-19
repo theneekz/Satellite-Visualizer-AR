@@ -10,7 +10,7 @@ import type { Message, UnknownEnum } from "@bufbuild/protobuf";
  * Describes the file omm.proto.
  */
 export const file_omm: GenFile = /*@__PURE__*/
-  fileDesc("CglvbW0ucHJvdG8irAMKA09NTRIKCgJpZBgBIAEoDRIMCgRuYW1lGAIgASgJEhIKCmRlc2lnbmF0b3IYAyABKAkSEAoIZXBvY2hfbXMYBCABKAMSEgoKcGVyaW9kX21pbhgFIAEoARIXCg9pbmNsaW5hdGlvbl9kZWcYBiABKAESFAoMZWNjZW50cmljaXR5GAcgASgBEhIKCnBlcmlnZWVfa20YCCABKAESEQoJYXBvZ2VlX2ttGAkgASgBEhMKC21lYW5fbW90aW9uGAogASgBEhAKCHJhYW5fZGVnGAsgASgBEhcKD2FyZ19wZXJpZ2VlX2RlZxgMIAEoARIYChBtZWFuX2Fub21hbHlfZGVnGA0gASgBEg0KBWJzdGFyGA4gASgBEhQKDHJldl9hdF9lcG9jaBgPIAEoDRIQCgNyY3MYESABKAlIAIgBARIXCgpvcmlnaW5hdG9yGBIgASgJSAGIAQESIAoLb2JqZWN0X3R5cGUYEyABKA4yCy5PYmplY3RUeXBlQgYKBF9yY3NCDQoLX29yaWdpbmF0b3JKBAgQEBFSEm9iamVjdF90eXBlX2xlZ2FjeSIjCgdPTU1MaXN0EhgKCnNhdGVsbGl0ZXMYASADKAsyBC5PTU0qdwoKT2JqZWN0VHlwZRIbChdPQkpFQ1RfVFlQRV9VTlNQRUNJRklFRBAAEhcKE09CSkVDVF9UWVBFX1BBWUxPQUQQARIbChdPQkpFQ1RfVFlQRV9ST0NLRVRfQk9EWRACEhYKEk9CSkVDVF9UWVBFX0RFQlJJUxADYgZwcm90bzM");
+  fileDesc("CglvbW0ucHJvdG8i1QMKA09NTRIKCgJpZBgBIAEoDRIMCgRuYW1lGAIgASgJEhIKCmRlc2lnbmF0b3IYAyABKAkSEAoIZXBvY2hfbXMYBCABKAMSEgoKcGVyaW9kX21pbhgFIAEoARIXCg9pbmNsaW5hdGlvbl9kZWcYBiABKAESFAoMZWNjZW50cmljaXR5GAcgASgBEhIKCnBlcmlnZWVfa20YCCABKAESEQoJYXBvZ2VlX2ttGAkgASgBEhMKC21lYW5fbW90aW9uGAogASgBEhAKCHJhYW5fZGVnGAsgASgBEhcKD2FyZ19wZXJpZ2VlX2RlZxgMIAEoARIYChBtZWFuX2Fub21hbHlfZGVnGA0gASgBEg0KBWJzdGFyGA4gASgBEhQKDHJldl9hdF9lcG9jaBgPIAEoDRIbCgpyY3NfbGVnYWN5GBEgASgJQgIYAUgAiAEBEhcKCm9yaWdpbmF0b3IYEiABKAlIAYgBARIgCgtvYmplY3RfdHlwZRgTIAEoDjILLk9iamVjdFR5cGUSFQoDcmNzGBQgASgOMgguUmNzU2l6ZUINCgtfcmNzX2xlZ2FjeUINCgtfb3JpZ2luYXRvckoECBAQEVISb2JqZWN0X3R5cGVfbGVnYWN5IiMKB09NTUxpc3QSGAoKc2F0ZWxsaXRlcxgBIAMoCzIELk9NTSp3CgpPYmplY3RUeXBlEhsKF09CSkVDVF9UWVBFX1VOU1BFQ0lGSUVEEAASFwoTT0JKRUNUX1RZUEVfUEFZTE9BRBABEhsKF09CSkVDVF9UWVBFX1JPQ0tFVF9CT0RZEAISFgoST0JKRUNUX1RZUEVfREVCUklTEAMqYAoHUmNzU2l6ZRIYChRSQ1NfU0laRV9VTlNQRUNJRklFRBAAEhIKDlJDU19TSVpFX1NNQUxMEAESEwoPUkNTX1NJWkVfTUVESVVNEAISEgoOUkNTX1NJWkVfTEFSR0UQA2IGcHJvdG8z");
 
 /**
  * Static display info for one OMM record.
@@ -108,13 +108,18 @@ export type OMM = Message<"OMM"> & {
   revAtEpoch: number;
 
   /**
-   * Optional: not present in every OMM source.
+   * Deprecated: replaced by rcs (field 20). The publish job still writes it
+   * so that clients built before the enum keep working. Once every client
+   * reads field 20, stop writing it and reserve 17.
    *
-   * @generated from field: optional string rcs = 17;
+   * @generated from field: optional string rcs_legacy = 17 [deprecated = true];
+   * @deprecated
    */
-  rcs?: string | undefined;
+  rcsLegacy?: string | undefined;
 
   /**
+   * Optional: not present in every OMM source.
+   *
    * @generated from field: optional string originator = 18;
    */
   originator?: string | undefined;
@@ -127,6 +132,13 @@ export type OMM = Message<"OMM"> & {
    * @generated from field: ObjectType object_type = 19;
    */
   objectType: ObjectType;
+
+  /**
+   * RCS_SIZE_UNSPECIFIED when the source doesn't give a size.
+   *
+   * @generated from field: RcsSize rcs = 20;
+   */
+  rcs: RcsSize;
 };
 
 /**
@@ -197,4 +209,48 @@ export type ObjectType = (typeof ObjectType)[keyof typeof ObjectType] | UnknownE
  */
 export const ObjectTypeSchema: GenEnum<ObjectType> = /*@__PURE__*/
   enumDesc(file_omm, 0);
+
+/**
+ * OMM RCS: how big the object looks to radar, as a radar cross-section
+ * bucket. Small is under 0.1 square meters, medium is 0.1 to 1, and large is
+ * over 1.
+ *
+ * @generated from enum RcsSize
+ */
+export const RcsSize = {
+  /**
+   * @generated from enum value: RCS_SIZE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED: 0,
+
+  /**
+   * @generated from enum value: RCS_SIZE_SMALL = 1;
+   */
+  SMALL: 1,
+
+  /**
+   * @generated from enum value: RCS_SIZE_MEDIUM = 2;
+   */
+  MEDIUM: 2,
+
+  /**
+   * @generated from enum value: RCS_SIZE_LARGE = 3;
+   */
+  LARGE: 3,
+} as const;
+
+/**
+ * OMM RCS: how big the object looks to radar, as a radar cross-section
+ * bucket. Small is under 0.1 square meters, medium is 0.1 to 1, and large is
+ * over 1.
+ *
+ * @generated from enum RcsSize
+ */
+export type RcsSize = (typeof RcsSize)[keyof typeof RcsSize] | UnknownEnum;
+
+/**
+ * Describes the enum RcsSize.
+ */
+export const RcsSizeSchema: GenEnum<RcsSize> = /*@__PURE__*/
+  enumDesc(file_omm, 1);
 
