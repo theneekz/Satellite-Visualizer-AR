@@ -14,7 +14,7 @@ The frontend is React + TypeScript (Vite) with a hand-written WebGPU renderer fo
 
 ### Data Loading
 
-`api/satellites.ts` owns the one endpoint. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` via `npm run ts-proto`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. Satellites load once on mount, with an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
+`api/satellites.ts` owns the one endpoint. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` via `npm run ts-proto`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. `object_type` is the `ObjectType` enum (field 19), with `UNSPECIFIED` for both OMM's `UNKNOWN` and a missing type (shown as Unknown); until every published payload has field 19, it falls back to the deprecated string in field 16. Satellites load once on mount, with an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
 
 ### Propagation
 
