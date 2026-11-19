@@ -1,5 +1,6 @@
 import {
   positionAt,
+  RcsSize,
   type PositionsSnapshot,
   type SatelliteInfo,
 } from "../api/satellites";
@@ -7,7 +8,7 @@ import { cssColor, sentenceCase } from "../format";
 import { computeLiveState, type LiveState } from "./liveState";
 import { DAY_MS, SATELLITE_TYPE_COLORS } from "../constants";
 import { getLaunchYear } from "../utilities";
-import { typeOf } from "../filters";
+import { sizeOf, typeOf } from "../filters";
 
 /**
  * The satellite card's contents, shared by the page's card (SatelliteCard) and the XR card
@@ -118,12 +119,14 @@ export function satelliteDetails(
     help: OBJECT_TYPE_HELP[objectType] ?? "The kind of object this is.",
     border: cssColor(SATELLITE_TYPE_COLORS[satellite.object_type]),
   });
-  if (satellite.rcs)
+  // Unlike the type, a missing size gets no badge.
+  if (satellite.rcs !== RcsSize.UNSPECIFIED) {
+    const size = sizeOf(satellite);
     badges.push({
-      text: sentenceCase(satellite.rcs),
-      help:
-        RADAR_SIZE_HELP[satellite.rcs] ?? "How big this object looks to radar.",
+      text: sentenceCase(size),
+      help: RADAR_SIZE_HELP[size] ?? "How big this object looks to radar.",
     });
+  }
   if (launchYear)
     badges.push({
       text: `Launched ${launchYear}`,

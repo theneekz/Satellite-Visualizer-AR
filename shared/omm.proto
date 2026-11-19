@@ -21,13 +21,18 @@ message OMM {
   // Was the OBJECT_TYPE string, replaced by the object_type enum (field 19).
   reserved 16;
   reserved "object_type_legacy";
+  // Deprecated: replaced by rcs (field 20). The publish job still writes it
+  // so that clients built before the enum keep working. Once every client
+  // reads field 20, stop writing it and reserve 17.
+  optional string rcs_legacy = 17 [deprecated = true];
   // Optional: not present in every OMM source.
-  optional string rcs = 17;
   optional string originator = 18;
   // OBJECT_TYPE_UNSPECIFIED when the type is UNKNOWN or the source doesn't
   // say. The value doubles as the frontend's per-type color index, so keep the
   // numbers stable.
   ObjectType object_type = 19;
+  // RCS_SIZE_UNSPECIFIED when the source doesn't give a size.
+  RcsSize rcs = 20;
 }
 
 // OMM OBJECT_TYPE. The frontend uses each value as an index into its type
@@ -39,6 +44,16 @@ enum ObjectType {
   OBJECT_TYPE_PAYLOAD = 1;
   OBJECT_TYPE_ROCKET_BODY = 2;
   OBJECT_TYPE_DEBRIS = 3;
+}
+
+// OMM RCS: how big the object looks to radar, as a radar cross-section
+// bucket. Small is under 0.1 square meters, medium is 0.1 to 1, and large is
+// over 1.
+enum RcsSize {
+  RCS_SIZE_UNSPECIFIED = 0;
+  RCS_SIZE_SMALL = 1;
+  RCS_SIZE_MEDIUM = 2;
+  RCS_SIZE_LARGE = 3;
 }
 
 message OMMList {

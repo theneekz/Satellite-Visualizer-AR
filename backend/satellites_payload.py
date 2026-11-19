@@ -25,6 +25,14 @@ OBJECT_TYPES = {
     "DEBRIS": omm_pb2.OBJECT_TYPE_DEBRIS,
 }
 
+# OMM RCS strings to the proto enum. Anything else, including a missing value,
+# becomes RCS_SIZE_UNSPECIFIED.
+RCS_SIZES = {
+    "SMALL": omm_pb2.RCS_SIZE_SMALL,
+    "MEDIUM": omm_pb2.RCS_SIZE_MEDIUM,
+    "LARGE": omm_pb2.RCS_SIZE_LARGE,
+}
+
 
 @dataclass(frozen=True)
 class SatellitesPayload:
@@ -100,10 +108,14 @@ def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
         omm.rev_at_epoch = record["REV_AT_EPOCH"]
         omm.object_type = OBJECT_TYPES.get(
             record.get("OBJECT_TYPE") or "", omm_pb2.OBJECT_TYPE_UNSPECIFIED)
+        rcs = record.get("RCS")
+        omm.rcs = RCS_SIZES.get(rcs or "", omm_pb2.RCS_SIZE_UNSPECIFIED)
+        # Still written for clients built before the enum. Remove it along
+        # with field 17.
+        if rcs is not None:
+            omm.rcs_legacy = rcs
         # Optional: not present in every OMM source. proto3 optional fields are left unset
         # rather than assigned None.
-        if record.get("RCS") is not None:
-            omm.rcs = record["RCS"]
         if record.get("ORIGINATOR") is not None:
             omm.originator = record["ORIGINATOR"]
         return True

@@ -1,7 +1,8 @@
 import { fromBinary } from "@bufbuild/protobuf";
-import { ObjectType, OMMListSchema, type OMM } from "../protos/omm_pb";
+import { ObjectType, RcsSize } from "../protos/omm_pb";
+import { OMMListSchema, type OMM } from "../protos/omm_pb";
 
-export { ObjectType };
+export { ObjectType, RcsSize };
 
 /** One satellite state in TEME, SGP4's inertial frame: position in km, velocity in km/s. */
 export interface SatellitePosition {
@@ -33,7 +34,9 @@ export interface SatelliteInfo {
   // ObjectType.UNSPECIFIED when the type is unknown. Also the satellite's type
   // color index.
   object_type: ObjectType;
-  rcs: string | null; // radar cross-section size bucket
+  // Radar cross-section size bucket. RcsSize.UNSPECIFIED when the source
+  // doesn't give one.
+  rcs: RcsSize;
   originator: string | null;
 }
 
@@ -108,6 +111,35 @@ function objectTypeOf(omm: OMM): ObjectType {
     : ObjectType.UNSPECIFIED;
 }
 
+// OMM's RCS name for each size, which the filters and labels show.
+export const RCS_SIZE_NAMES: Record<RcsSize, string> = {
+  [RcsSize.UNSPECIFIED]: "UNKNOWN",
+  [RcsSize.SMALL]: "SMALL",
+  [RcsSize.MEDIUM]: "MEDIUM",
+  [RcsSize.LARGE]: "LARGE",
+};
+
+// The deprecated OMM RCS strings, for payloads published before the RcsSize
+// enum.
+const LEGACY_RCS_SIZES: Record<string, RcsSize> = {
+  SMALL: RcsSize.SMALL,
+  MEDIUM: RcsSize.MEDIUM,
+  LARGE: RcsSize.LARGE,
+};
+
+/**
+ * The satellite's radar size, always one this build knows. A value added to
+ * the proto after this build counts as UNSPECIFIED. Payloads published before
+ * the enum only have the legacy string; remove that fallback once every
+ * published payload has field 20.
+ */
+function rcsSizeOf(omm: OMM): RcsSize {
+  if (omm.rcs !== RcsSize.UNSPECIFIED) {
+    return omm.rcs in RCS_SIZE_NAMES ? omm.rcs : RcsSize.UNSPECIFIED;
+  }
+  return LEGACY_RCS_SIZES[omm.rcsLegacy ?? ""] ?? RcsSize.UNSPECIFIED;
+}
+
 /** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */
 function toSatelliteInfo(omm: OMM): SatelliteInfo {
   return {
@@ -129,7 +161,7 @@ function toSatelliteInfo(omm: OMM): SatelliteInfo {
     rev_at_epoch: omm.revAtEpoch,
     object_type: objectTypeOf(omm),
     // Unset proto3 optional fields decode as undefined.
-    rcs: omm.rcs ?? null,
+    rcs: rcsSizeOf(omm),
     originator: omm.originator ?? null,
   };
 }
