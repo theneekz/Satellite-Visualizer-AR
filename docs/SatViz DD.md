@@ -14,7 +14,7 @@ The frontend is React + TypeScript (Vite) with a hand-written WebGPU renderer fo
 
 ### Data Loading
 
-`api/satellites.ts` owns the one endpoint. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` via `npm run ts-proto`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. `object_type` is the `ObjectType` enum (field 19), with `UNSPECIFIED` for both OMM's `UNKNOWN` and a missing type (shown as Unknown); until every published payload has field 19, it falls back to the deprecated string in field 16. Satellites load once on mount, with an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
+`api/satellites.ts` owns the one endpoint. `getSatellites` fetches `/v2/satellites`, decodes the `OMMList` with protobuf-es (types generated from `shared/omm.proto` by protoc-gen-es with `target=ts,erasable_syntax=true`, because the tsconfig sets `erasableSyntaxOnly`), and maps each message onto the app's `SatelliteInfo` interface. int64 `epoch_ms` decodes as bigint and is converted with `Number()`; unset optional fields become `null`. `object_type` is the `ObjectType` enum (field 19), with `UNSPECIFIED` for both OMM's `UNKNOWN` and a missing type (shown as Unknown); until every published payload has field 19, it falls back to the deprecated string in field 16. Satellites load once on mount, with an AbortController so React StrictMode's dev-only double mount cancels the duplicate request.
 
 ### Propagation
 
@@ -26,7 +26,9 @@ Vite bundles workers as ES modules (`worker.format: "es"`) because satellite.js 
 
 ### WebGPU Rendering Pipeline
 
-The globe is a procedurally built UV sphere with an Earth texture (NASA's Blue Marble Next Generation, January), rotated each frame by GMST from satellite.js's `gstime`, the model that defines SGP4's TEME frame (UT1 approximated by UTC). Satellites are instanced quads: the instance buffer holds each satellite's propagated TEME position and velocity, and the vertex shader extrapolates in a straight line by the time since the snapshot. This is accurate to a few km over the 30 second propagation interval, and each snapshot re-anchors it. When no filter is active, the snapshot's state block is uploaded to the GPU as-is because its layout matches the instance buffer.
+The globe is a procedurally built UV sphere with an Earth texture (NASA's Blue Marble Next Generation, January), rotated each frame by GMST from satellite.js's `gstime`, the model that defines SGP4's TEME frame (UT1 approximated by UTC). Satellites are instanced quads: the instance buffer holds each satellite's propagated TEME position and velocity plus its `ObjectType`, and the vertex shader extrapolates in a straight line by the time since the snapshot. This is accurate to a few km over the 30 second propagation interval, and each snapshot re-anchors it. When no filter is active, the snapshot's state block is uploaded to the GPU as-is because its layout matches the instance buffer. The worker copies each satellite's `ObjectType` into every snapshot, rather than keeping a separate per-satellite array, because it drops satellites SGP4 can't propagate and filtering reorders them, so a separate array wouldn't stay lined up.
+
+Each satellite's color comes from its `ObjectType`, used as an index into `SATELLITE_TYPE_COLORS` in `constants.ts`: payloads are yellow, rocket bodies vermilion, debris reddish purple, and unspecified types gray. The hues come from the Okabe-Ito palette, which stays distinguishable with common color blindness, and avoid the selected satellite's light blue. The WebGPU shader indexes a constant array, and the Three.js renderer uses a chain of `select` nodes.
 
 To keep the first frame fast, the globe first draws a 2048x1024 WebP preview of about 210 KB. After the satellite data loads and the browser is idle, a sharp image loads and replaces it: 8192x4096 (about 2.3 MB) on desktop and headsets, or 4096x2048 (about 680 KB) on touch devices, where 8K's roughly 170 MB of GPU memory is too much for older phones. The sharp image is decoded off the main thread so the swap doesn't stall a frame. index.html preloads the satellite data so its download starts before any JavaScript runs. Both renderers use mipmaps and anisotropic filtering so the sharp image doesn't shimmer when the globe is small or seen at a steep angle.
 
@@ -46,13 +48,13 @@ While a satellite is selected, both renderers draw its next revolution as a line
 
 - SatelliteList: virtualized with @tanstack/react-virtual using fixed 34px rows, so only about 40 rows are in the DOM regardless of list size. Selection scrolls by index.
 - SatelliteFilterBar: name/NORAD search, object type, RCS size, and launch year range, debounced 250ms. Filtering runs client-side over the full list and the globe draws only visible ids.
-- SatelliteCard: live altitude, speed, and lat/lon recomputed every second from the latest snapshot (`liveState.ts`, WGS84, same GMST as the globe), plus an orbit diagram and OMM details.
+- SatelliteCard: live altitude, speed, and lat/lon recomputed every second from the latest snapshot (`liveState.ts`, WGS84, same GMST as the globe), plus an orbit diagram and OMM details. The type badge has a 1px border in the satellite's globe color, which serves as the color key until there's a legend.
 
 ## Backend
 
 ### Publish Job
 
-`publish.py` builds the `/v2/satellites` payload and uploads it to Cloudflare R2. The scheduled workflow `.github/workflows/publish-satellites.yml` runs it every 8 hours. Each run makes one request for Spacebook's OMM JSON, with a User-Agent that names the project, a timeout, and no retries. It is the only code that calls Spacebook, so the request count doesn't grow with traffic, and a failed run leaves the published payload in place until the next one.
+`publish.py` builds the `/v2/satellites` payload and uploads it to Cloudflare R2. The scheduled workflow `.github/workflows/publish-satellites.yml` runs it every 12 hours, and it can also be run manually. Each run makes one request for Spacebook's OMM JSON, with a User-Agent that names the project, a timeout, and no retries. It is the only code that calls Spacebook, so the request count doesn't grow with traffic, and a failed run leaves the published payload in place until the next one.
 
 Before uploading, the job reads the published object's metadata. It skips the upload when the version is unchanged, and it refuses to replace the payload with one under 90% of the published satellite count, which signals a truncated download. The object, `satellites.pb.gz`, is stored with `Content-Type: application/x-protobuf`, `Content-Encoding: gzip`, and custom metadata for `version` and `count`. `--input` publishes a saved OMM JSON file instead of downloading one, and `--output` writes the payload to a local file instead of uploading it.
 
@@ -138,4 +140,4 @@ Skyfield can compute a precise Sun position but needs a JPL ephemeris file (abou
 
 ## Future Work
 
-Element set history (dated payloads in R2), satcat join for country and launch data, pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.
+A legend for the object type colors. Removing the deprecated `object_type_legacy` string (field 16) once every published payload has the `ObjectType` enum (field 19): stop writing it in the backend, mark it `reserved` in the proto, and remove the frontend fallback, deploying the frontend first. Element set history (dated payloads in R2), satcat join for country and launch data, pass predictions (possible in the browser now), conjunction analysis as a scheduled job, and conditional requests to Spacebook if its API returns `ETag` or `Last-Modified`.

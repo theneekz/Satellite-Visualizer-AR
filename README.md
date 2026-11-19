@@ -13,6 +13,7 @@ Demo of AR functionality: [https://youtu.be/W58HhXezaD8](https://youtu.be/W58HhX
 - AR/VR immersive experience for Meta Quest & Android
 - 3D globe with live satellite positions
 - Real-time orbital animation (propagation in the browser)
+- Color coding by object type (payload, rocket body, debris, or unknown)
 - Satellite search and filtering (by name, type, and launch year)
 - Select to view satellite details (name, altitude, velocity, orbital period)
 
@@ -53,6 +54,6 @@ TODO! See `docs/SatViz DD.md` for full technical details, architecture, and road
 ## Roadmap
 
 - Country of origin data.
-- Color coding based on object type.
+- A legend for the object type colors.
 - Pass predictions and satellite conjunction analysis (close-approach prediction).
 - Time slider for past/future position data.
