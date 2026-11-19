@@ -24,21 +24,19 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\tomm.proto\"\xd5\x03\n\x03OMM\x12\n\n\x02id\x18\x01 \x01(\r\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\ndesignator\x18\x03 \x01(\t\x12\x10\n\x08\x65poch_ms\x18\x04 \x01(\x03\x12\x12\n\nperiod_min\x18\x05 \x01(\x01\x12\x17\n\x0finclination_deg\x18\x06 \x01(\x01\x12\x14\n\x0c\x65\x63\x63\x65ntricity\x18\x07 \x01(\x01\x12\x12\n\nperigee_km\x18\x08 \x01(\x01\x12\x11\n\tapogee_km\x18\t \x01(\x01\x12\x13\n\x0bmean_motion\x18\n \x01(\x01\x12\x10\n\x08raan_deg\x18\x0b \x01(\x01\x12\x17\n\x0f\x61rg_perigee_deg\x18\x0c \x01(\x01\x12\x18\n\x10mean_anomaly_deg\x18\r \x01(\x01\x12\r\n\x05\x62star\x18\x0e \x01(\x01\x12\x14\n\x0crev_at_epoch\x18\x0f \x01(\r\x12\x1b\n\nrcs_legacy\x18\x11 \x01(\tB\x02\x18\x01H\x00\x88\x01\x01\x12\x17\n\noriginator\x18\x12 \x01(\tH\x01\x88\x01\x01\x12 \n\x0bobject_type\x18\x13 \x01(\x0e\x32\x0b.ObjectType\x12\x15\n\x03rcs\x18\x14 \x01(\x0e\x32\x08.RcsSizeB\r\n\x0b_rcs_legacyB\r\n\x0b_originatorJ\x04\x08\x10\x10\x11R\x12object_type_legacy\"#\n\x07OMMList\x12\x18\n\nsatellites\x18\x01 \x03(\x0b\x32\x04.OMM*w\n\nObjectType\x12\x1b\n\x17OBJECT_TYPE_UNSPECIFIED\x10\x00\x12\x17\n\x13OBJECT_TYPE_PAYLOAD\x10\x01\x12\x1b\n\x17OBJECT_TYPE_ROCKET_BODY\x10\x02\x12\x16\n\x12OBJECT_TYPE_DEBRIS\x10\x03*`\n\x07RcsSize\x12\x18\n\x14RCS_SIZE_UNSPECIFIED\x10\x00\x12\x12\n\x0eRCS_SIZE_SMALL\x10\x01\x12\x13\n\x0fRCS_SIZE_MEDIUM\x10\x02\x12\x12\n\x0eRCS_SIZE_LARGE\x10\x03\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\tomm.proto\"\xbb\x03\n\x03OMM\x12\n\n\x02id\x18\x01 \x01(\r\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x12\n\ndesignator\x18\x03 \x01(\t\x12\x10\n\x08\x65poch_ms\x18\x04 \x01(\x03\x12\x12\n\nperiod_min\x18\x05 \x01(\x01\x12\x17\n\x0finclination_deg\x18\x06 \x01(\x01\x12\x14\n\x0c\x65\x63\x63\x65ntricity\x18\x07 \x01(\x01\x12\x12\n\nperigee_km\x18\x08 \x01(\x01\x12\x11\n\tapogee_km\x18\t \x01(\x01\x12\x13\n\x0bmean_motion\x18\n \x01(\x01\x12\x10\n\x08raan_deg\x18\x0b \x01(\x01\x12\x17\n\x0f\x61rg_perigee_deg\x18\x0c \x01(\x01\x12\x18\n\x10mean_anomaly_deg\x18\r \x01(\x01\x12\r\n\x05\x62star\x18\x0e \x01(\x01\x12\x14\n\x0crev_at_epoch\x18\x0f \x01(\r\x12\x17\n\noriginator\x18\x12 \x01(\tH\x00\x88\x01\x01\x12 \n\x0bobject_type\x18\x13 \x01(\x0e\x32\x0b.ObjectType\x12\x15\n\x03rcs\x18\x14 \x01(\x0e\x32\x08.RcsSizeB\r\n\x0b_originatorJ\x04\x08\x10\x10\x11J\x04\x08\x11\x10\x12R\x12object_type_legacyR\nrcs_legacy\"#\n\x07OMMList\x12\x18\n\nsatellites\x18\x01 \x03(\x0b\x32\x04.OMM*w\n\nObjectType\x12\x1b\n\x17OBJECT_TYPE_UNSPECIFIED\x10\x00\x12\x17\n\x13OBJECT_TYPE_PAYLOAD\x10\x01\x12\x1b\n\x17OBJECT_TYPE_ROCKET_BODY\x10\x02\x12\x16\n\x12OBJECT_TYPE_DEBRIS\x10\x03*`\n\x07RcsSize\x12\x18\n\x14RCS_SIZE_UNSPECIFIED\x10\x00\x12\x12\n\x0eRCS_SIZE_SMALL\x10\x01\x12\x13\n\x0fRCS_SIZE_MEDIUM\x10\x02\x12\x12\n\x0eRCS_SIZE_LARGE\x10\x03\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'omm_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_OMM'].fields_by_name['rcs_legacy']._loaded_options = None
-  _globals['_OMM'].fields_by_name['rcs_legacy']._serialized_options = b'\030\001'
-  _globals['_OBJECTTYPE']._serialized_start=522
-  _globals['_OBJECTTYPE']._serialized_end=641
-  _globals['_RCSSIZE']._serialized_start=643
-  _globals['_RCSSIZE']._serialized_end=739
+  _globals['_OBJECTTYPE']._serialized_start=496
+  _globals['_OBJECTTYPE']._serialized_end=615
+  _globals['_RCSSIZE']._serialized_start=617
+  _globals['_RCSSIZE']._serialized_end=713
   _globals['_OMM']._serialized_start=14
-  _globals['_OMM']._serialized_end=483
-  _globals['_OMMLIST']._serialized_start=485
-  _globals['_OMMLIST']._serialized_end=520
+  _globals['_OMM']._serialized_end=457
+  _globals['_OMMLIST']._serialized_start=459
+  _globals['_OMMLIST']._serialized_end=494
 # @@protoc_insertion_point(module_scope)

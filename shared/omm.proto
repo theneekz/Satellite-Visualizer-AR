@@ -21,10 +21,9 @@ message OMM {
   // Was the OBJECT_TYPE string, replaced by the object_type enum (field 19).
   reserved 16;
   reserved "object_type_legacy";
-  // Deprecated: replaced by rcs (field 20). The publish job still writes it
-  // so that clients built before the enum keep working. Once every client
-  // reads field 20, stop writing it and reserve 17.
-  optional string rcs_legacy = 17 [deprecated = true];
+  // Was the RCS string, replaced by the rcs enum (field 20).
+  reserved 17;
+  reserved "rcs_legacy";
   // Optional: not present in every OMM source.
   optional string originator = 18;
   // OBJECT_TYPE_UNSPECIFIED when the type is UNKNOWN or the source doesn't

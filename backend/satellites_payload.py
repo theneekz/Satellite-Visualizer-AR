@@ -108,12 +108,8 @@ def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
         omm.rev_at_epoch = record["REV_AT_EPOCH"]
         omm.object_type = OBJECT_TYPES.get(
             record.get("OBJECT_TYPE") or "", omm_pb2.OBJECT_TYPE_UNSPECIFIED)
-        rcs = record.get("RCS")
-        omm.rcs = RCS_SIZES.get(rcs or "", omm_pb2.RCS_SIZE_UNSPECIFIED)
-        # Still written for clients built before the enum. Remove it along
-        # with field 17.
-        if rcs is not None:
-            omm.rcs_legacy = rcs
+        omm.rcs = RCS_SIZES.get(
+            record.get("RCS") or "", omm_pb2.RCS_SIZE_UNSPECIFIED)
         # Optional: not present in every OMM source. proto3 optional fields are left unset
         # rather than assigned None.
         if record.get("ORIGINATOR") is not None:
