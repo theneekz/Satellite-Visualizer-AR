@@ -3,9 +3,9 @@ import {
   type PositionsSnapshot,
   type SatelliteInfo,
 } from "../api/satellites";
-import { sentenceCase } from "../format";
+import { cssColor, sentenceCase } from "../format";
 import { computeLiveState, type LiveState } from "./liveState";
-import { DAY_MS } from "../constants";
+import { DAY_MS, SATELLITE_TYPE_COLORS } from "../constants";
 import { getLaunchYear } from "../utilities";
 import { typeOf } from "../filters";
 
@@ -81,8 +81,9 @@ export interface DetailMetric {
 export interface DetailBadge {
   text: string;
   help: string;
-  // "type" is the object type's highlighted badge; "plain" is the default look.
-  tone: "type" | "plain";
+  // A CSS color for a 1px border. The type badge uses the satellite's color
+  // on the globe, so the card doubles as a key for the colors.
+  border?: string;
 }
 
 export interface DetailSection {
@@ -115,20 +116,18 @@ export function satelliteDetails(
   badges.push({
     text: sentenceCase(objectType),
     help: OBJECT_TYPE_HELP[objectType] ?? "The kind of object this is.",
-    tone: "type",
+    border: cssColor(SATELLITE_TYPE_COLORS[satellite.object_type]),
   });
   if (satellite.rcs)
     badges.push({
       text: sentenceCase(satellite.rcs),
       help:
         RADAR_SIZE_HELP[satellite.rcs] ?? "How big this object looks to radar.",
-      tone: "plain",
     });
   if (launchYear)
     badges.push({
       text: `Launched ${launchYear}`,
       help: "The year this object went to space.",
-      tone: "plain",
     });
 
   const data: DetailMetric[] = [];
