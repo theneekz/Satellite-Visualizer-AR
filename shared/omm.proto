@@ -18,10 +18,28 @@ message OMM {
   double bstar = 14;
   uint32 rev_at_epoch = 15;
 
+  // Deprecated: replaced by object_type (field 19). The publish job still
+  // writes it so that clients built before the enum keep working. Once every
+  // client reads field 19, stop writing it and reserve 16.
+  optional string object_type_legacy = 16 [deprecated = true];
   // Optional: not present in every OMM source.
-  optional string object_type = 16;
   optional string rcs = 17;
   optional string originator = 18;
+  // OBJECT_TYPE_UNSPECIFIED when the type is UNKNOWN or the source doesn't
+  // say. The value doubles as the frontend's per-type color index, so keep the
+  // numbers stable.
+  ObjectType object_type = 19;
+}
+
+// OMM OBJECT_TYPE. The frontend uses each value as an index into its type
+// color palette.
+enum ObjectType {
+  // Covers both OMM's UNKNOWN and a missing OBJECT_TYPE: SatViz treats them
+  // the same.
+  OBJECT_TYPE_UNSPECIFIED = 0;
+  OBJECT_TYPE_PAYLOAD = 1;
+  OBJECT_TYPE_ROCKET_BODY = 2;
+  OBJECT_TYPE_DEBRIS = 3;
 }
 
 message OMMList {

@@ -1,5 +1,7 @@
 import { fromBinary } from "@bufbuild/protobuf";
-import { OMMListSchema, type OMM } from "../protos/omm_pb";
+import { ObjectType, OMMListSchema, type OMM } from "../protos/omm_pb";
+
+export { ObjectType };
 
 /** One satellite state in TEME, SGP4's inertial frame: position in km, velocity in km/s. */
 export interface SatellitePosition {
@@ -28,18 +30,24 @@ export interface SatelliteInfo {
   mean_anomaly_deg: number; // at epoch
   bstar: number;
   rev_at_epoch: number;
-  object_type: string | null; // PAYLOAD, ROCKET BODY, DEBRIS, UNKNOWN; absent in some sources
+  // ObjectType.UNSPECIFIED when the type is unknown. Also the satellite's type
+  // color index.
+  object_type: ObjectType;
   rcs: string | null; // radar cross-section size bucket
   originator: string | null;
 }
 
-// Floats per satellite in the state block: position (3) + velocity (3).
-export const FLOATS_PER_SATELLITE = 6;
+// Floats per satellite in the state block: position (3) + velocity (3) +
+// ObjectType (1). The type rides along with each snapshot because the worker
+// drops satellites SGP4 can't propagate and filtering reorders them, so a
+// separate per-satellite array wouldn't stay lined up.
+export const FLOATS_PER_SATELLITE = 7;
 
 /**
  * Every satellite's state at `t` (Unix epoch milliseconds, UTC), propagated in the browser by
  * usePropagatedPositions. `ids[i]` is the NORAD id whose TEME state (x, y, z km, vx, vy, vz km/s)
- * is `state[i * 6 .. i * 6 + 6]`.
+ * is `state[i * 7 .. i * 7 + 6]`, followed by its ObjectType, which the
+ * shaders use as a color index.
  */
 export interface PositionsSnapshot {
   t: number;
@@ -81,6 +89,40 @@ export function positionAt(
 
 const SATELLITES_URL = "/v2/satellites";
 
+// OMM's OBJECT_TYPE name for each type, which the filters and labels show.
+// UNSPECIFIED shows as Unknown, like OMM's own UNKNOWN.
+export const OBJECT_TYPE_NAMES: Record<ObjectType, string> = {
+  [ObjectType.UNSPECIFIED]: "UNKNOWN",
+  [ObjectType.PAYLOAD]: "PAYLOAD",
+  [ObjectType.ROCKET_BODY]: "ROCKET BODY",
+  [ObjectType.DEBRIS]: "DEBRIS",
+};
+
+// The deprecated OMM OBJECT_TYPE strings, for payloads published before the
+// ObjectType enum.
+const LEGACY_OBJECT_TYPES: Record<string, ObjectType> = {
+  PAYLOAD: ObjectType.PAYLOAD,
+  "ROCKET BODY": ObjectType.ROCKET_BODY,
+  DEBRIS: ObjectType.DEBRIS,
+};
+
+/**
+ * The satellite's type, always one this build knows, so it's a valid color
+ * index. A value added to the proto after this build counts as UNSPECIFIED.
+ * Payloads published before the enum only have the legacy string; remove that
+ * fallback once every published payload has field 19.
+ */
+function objectTypeOf(omm: OMM): ObjectType {
+  if (omm.objectType !== ObjectType.UNSPECIFIED) {
+    return omm.objectType in OBJECT_TYPE_NAMES
+      ? omm.objectType
+      : ObjectType.UNSPECIFIED;
+  }
+  return (
+    LEGACY_OBJECT_TYPES[omm.objectTypeLegacy ?? ""] ?? ObjectType.UNSPECIFIED
+  );
+}
+
 /** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */
 function toSatelliteInfo(omm: OMM): SatelliteInfo {
   return {
@@ -100,8 +142,8 @@ function toSatelliteInfo(omm: OMM): SatelliteInfo {
     mean_anomaly_deg: omm.meanAnomalyDeg,
     bstar: omm.bstar,
     rev_at_epoch: omm.revAtEpoch,
+    object_type: objectTypeOf(omm),
     // Unset proto3 optional fields decode as undefined.
-    object_type: omm.objectType ?? null,
     rcs: omm.rcs ?? null,
     originator: omm.originator ?? null,
   };

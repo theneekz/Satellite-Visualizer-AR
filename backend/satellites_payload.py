@@ -17,6 +17,14 @@ from protos import omm_pb2
 EARTH_RADIUS_KM = 6378.137
 EARTH_MU = 398600.4418  # km^3/s^2
 
+# OMM OBJECT_TYPE strings to the proto enum. Anything else, including UNKNOWN
+# and a missing value, becomes OBJECT_TYPE_UNSPECIFIED.
+OBJECT_TYPES = {
+    "PAYLOAD": omm_pb2.OBJECT_TYPE_PAYLOAD,
+    "ROCKET BODY": omm_pb2.OBJECT_TYPE_ROCKET_BODY,
+    "DEBRIS": omm_pb2.OBJECT_TYPE_DEBRIS,
+}
+
 
 @dataclass(frozen=True)
 class SatellitesPayload:
@@ -92,8 +100,12 @@ def build_omm_proto(omm: omm_pb2.OMM, record: dict) -> bool:
         omm.rev_at_epoch = record["REV_AT_EPOCH"]
         # Optional: not present in every OMM source. proto3 optional fields are left unset
         # rather than assigned None.
-        if record.get("OBJECT_TYPE") is not None:
-            omm.object_type = record["OBJECT_TYPE"]
+        # An unset object_type reads as 0, OBJECT_TYPE_UNSPECIFIED.
+        object_type = record.get("OBJECT_TYPE")
+        if object_type is not None:
+            omm.object_type = OBJECT_TYPES.get(
+                object_type, omm_pb2.OBJECT_TYPE_UNSPECIFIED)
+            omm.object_type_legacy = object_type
         if record.get("RCS") is not None:
             omm.rcs = record["RCS"]
         if record.get("ORIGINATOR") is not None:

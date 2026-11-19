@@ -23,7 +23,8 @@ export type PropagatorRequest =
 
 /**
  * Every satellite SGP4 could propagate to a believable position at `timeMs`, laid out like PositionsSnapshot: `ids[i]` is
- * the NORAD id whose TEME state is `state[i * 6 .. i * 6 + 6]`.
+ * the NORAD id whose TEME state is `state[i * 7 .. i * 7 + 6]`, followed by
+ * its ObjectType.
  */
 export interface PropagatorSnapshot {
   type: "snapshot";
@@ -38,12 +39,15 @@ export type PropagatorResponse =
 let satrecs: SatRec[] = [];
 // The NORAD id of satrecs[i].
 let satrecIds = new Uint32Array(0);
+// The ObjectType of satrecs[i].
+let satrecTypes = new Uint8Array(0);
 let satrecById = new Map<number, SatRec>();
 
 self.onmessage = (event: MessageEvent<PropagatorRequest>) => {
   const request = event.data;
   if (request.type === "load") {
     satrecIds = request.elements.ids;
+    satrecTypes = request.elements.objectType;
     satrecs = Array.from(satrecIds, (_, i) => toSatrec(request.elements, i));
     satrecById = new Map(satrecs.map((satrec, i) => [satrecIds[i], satrec]));
   } else if (request.type === "path") {
@@ -155,6 +159,7 @@ function propagateAll(timeMs: number): PropagatorSnapshot {
     state[o + 3] = velocity.x;
     state[o + 4] = velocity.y;
     state[o + 5] = velocity.z;
+    state[o + 6] = satrecTypes[i];
     ids[n] = satrecIds[i];
     n++;
   }

@@ -14,6 +14,9 @@ export interface OrbitalElements {
   argPerigeeDeg: Float64Array<ArrayBuffer>;
   meanAnomalyDeg: Float64Array<ArrayBuffer>; // at epoch
   bstar: Float64Array<ArrayBuffer>;
+  // Not an SGP4 input: the worker copies it into each snapshot as the
+  // satellite's color index.
+  objectType: Uint8Array<ArrayBuffer>;
 }
 
 export function packElements(satellites: SatelliteInfo[]): OrbitalElements {
@@ -28,6 +31,7 @@ export function packElements(satellites: SatelliteInfo[]): OrbitalElements {
     argPerigeeDeg: new Float64Array(n),
     meanAnomalyDeg: new Float64Array(n),
     bstar: new Float64Array(n),
+    objectType: new Uint8Array(n),
   };
   satellites.forEach((satellite, i) => {
     elements.ids[i] = satellite.id;
@@ -39,6 +43,7 @@ export function packElements(satellites: SatelliteInfo[]): OrbitalElements {
     elements.argPerigeeDeg[i] = satellite.arg_perigee_deg;
     elements.meanAnomalyDeg[i] = satellite.mean_anomaly_deg;
     elements.bstar[i] = satellite.bstar;
+    elements.objectType[i] = satellite.object_type;
   });
   return elements;
 }

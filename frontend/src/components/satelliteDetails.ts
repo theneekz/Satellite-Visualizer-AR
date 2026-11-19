@@ -7,6 +7,7 @@ import { sentenceCase } from "../format";
 import { computeLiveState, type LiveState } from "./liveState";
 import { DAY_MS } from "../constants";
 import { getLaunchYear } from "../utilities";
+import { typeOf } from "../filters";
 
 /**
  * The satellite card's contents, shared by the page's card (SatelliteCard) and the XR card
@@ -110,15 +111,12 @@ export function satelliteDetails(
 ): SatelliteDetails {
   const launchYear = getLaunchYear(satellite);
   const badges: DetailBadge[] = [];
-  if (satellite.object_type) {
-    badges.push({
-      text: sentenceCase(satellite.object_type),
-      help:
-        OBJECT_TYPE_HELP[satellite.object_type] ??
-        "The kind of object this is.",
-      tone: "type",
-    });
-  }
+  const objectType = typeOf(satellite);
+  badges.push({
+    text: sentenceCase(objectType),
+    help: OBJECT_TYPE_HELP[objectType] ?? "The kind of object this is.",
+    tone: "type",
+  });
   if (satellite.rcs)
     badges.push({
       text: sentenceCase(satellite.rcs),

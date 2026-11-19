@@ -2,7 +2,11 @@ import {
   FLOATS_PER_SATELLITE,
   type PositionsSnapshot,
 } from "../api/satellites";
-import { EARTH_RADIUS_KM, SATELLITE_SHADOW_BRIGHTNESS } from "../constants";
+import {
+  EARTH_RADIUS_KM,
+  SATELLITE_SHADOW_BRIGHTNESS,
+  SATELLITE_TYPE_COLORS,
+} from "../constants";
 import {
   SATELLITE_SIZE_PX,
   extrapolationSeconds,
@@ -10,6 +14,13 @@ import {
   scenePositionAt,
 } from "./satelliteScene";
 import { sunDirection } from "./sun";
+
+// SATELLITE_TYPE_COLORS as WGSL vec3f constructors, for the shader's color
+// lookup.
+const TYPE_COUNT = SATELLITE_TYPE_COLORS.length;
+const TYPE_COLORS_WGSL = SATELLITE_TYPE_COLORS.map(
+  ([r, g, b]) => `vec3f(${r}, ${g}, ${b})`
+).join(", ");
 
 const SHADER_SOURCE = /* wgsl */ `
   struct Uniforms {
@@ -27,6 +38,7 @@ const SHADER_SOURCE = /* wgsl */ `
     @builtin(position) position: vec4f,
     @location(0) @interpolate(flat) selected: f32,
     @location(1) @interpolate(flat) shade: f32,
+    @location(2) @interpolate(flat) color: vec3f,
   }
 
   @vertex
@@ -35,6 +47,7 @@ const SHADER_SOURCE = /* wgsl */ `
     @builtin(instance_index) instanceIndex: u32,
     @location(0) position: vec3f,
     @location(1) velocity: vec3f,
+    @location(2) objectType: f32,
   ) -> VertexOutput {
     var corners = array<vec2f, 6>(
       vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
@@ -61,12 +74,16 @@ const SHADER_SOURCE = /* wgsl */ `
     let offAxisSquared = dot(unitPosition, unitPosition) - alongSun * alongSun;
     let inShadow = alongSun < 0.0 && offAxisSquared < 1.0;
     out.shade = select(1.0, ${SATELLITE_SHADOW_BRIGHTNESS}, inShadow);
+    // The ObjectType is a small whole number stored as a float; clamping keeps
+    // a bad value in range.
+    var typeColors = array<vec3f, ${TYPE_COUNT}>(${TYPE_COLORS_WGSL});
+    out.color = typeColors[min(u32(objectType), ${TYPE_COUNT - 1}u)];
     return out;
   }
 
   @fragment
   fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let base = vec4f(vec3f(1.0, 0.85, 0.2) * in.shade, 1.0);
+    let base = vec4f(in.color * in.shade, 1.0);
     let highlight = vec4f(0.52, 0.72, 0.92, 1.0);
     return select(base, highlight, in.selected > 0.5);
   }
@@ -120,6 +137,7 @@ export function createSatelliteRenderer(
           attributes: [
             { shaderLocation: 0, offset: 0, format: "float32x3" },
             { shaderLocation: 1, offset: 3 * 4, format: "float32x3" },
+            { shaderLocation: 2, offset: 6 * 4, format: "float32" },
           ],
         },
       ],
