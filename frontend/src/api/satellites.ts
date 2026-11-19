@@ -119,25 +119,12 @@ export const RCS_SIZE_NAMES: Record<RcsSize, string> = {
   [RcsSize.LARGE]: "LARGE",
 };
 
-// The deprecated OMM RCS strings, for payloads published before the RcsSize
-// enum.
-const LEGACY_RCS_SIZES: Record<string, RcsSize> = {
-  SMALL: RcsSize.SMALL,
-  MEDIUM: RcsSize.MEDIUM,
-  LARGE: RcsSize.LARGE,
-};
-
 /**
  * The satellite's radar size, always one this build knows. A value added to
- * the proto after this build counts as UNSPECIFIED. Payloads published before
- * the enum only have the legacy string; remove that fallback once every
- * published payload has field 20.
+ * the proto after this build counts as UNSPECIFIED.
  */
 function rcsSizeOf(omm: OMM): RcsSize {
-  if (omm.rcs !== RcsSize.UNSPECIFIED) {
-    return omm.rcs in RCS_SIZE_NAMES ? omm.rcs : RcsSize.UNSPECIFIED;
-  }
-  return LEGACY_RCS_SIZES[omm.rcsLegacy ?? ""] ?? RcsSize.UNSPECIFIED;
+  return omm.rcs in RCS_SIZE_NAMES ? omm.rcs : RcsSize.UNSPECIFIED;
 }
 
 /** Maps a decoded protobuf OMM onto the app's SatelliteInfo shape. */
