@@ -233,7 +233,14 @@ function SatelliteCard({
             <Tooltip
               key={badge.text}
               text={badge.help}
-              className={`satellite-card__badge${badge.tone === "type" ? " satellite-card__badge--type" : ""}`}
+              className="satellite-card__badge"
+              // An inset shadow draws the border without changing the
+              // badge's size, so it lines up with the badges next to it.
+              style={
+                badge.border
+                  ? { boxShadow: `inset 0 0 0 1px ${badge.border}` }
+                  : undefined
+              }
             >
               {badge.text}
             </Tooltip>

@@ -77,7 +77,6 @@ export const BADGE_COLORS = {
     text: "rgba(255, 255, 255, 0.75)",
     background: "rgba(255, 255, 255, 0.1)",
   },
-  type: { text: "#9fe1cb", background: "rgba(29, 158, 117, 0.22)" },
   fresh: { text: "#c0dd97", background: "rgba(99, 153, 34, 0.25)" },
   aging: { text: "#fac775", background: "rgba(186, 117, 23, 0.25)" },
   stale: { text: "#f7c1c1", background: "rgba(226, 75, 74, 0.25)" },
@@ -164,13 +163,28 @@ export function drawBadge(
   text: string,
   x: number,
   y: number,
-  colors: { text: string; background: string }
+  colors: { text: string; background: string },
+  // A CSS color for a 1px border inside the badge's edge, like the page's.
+  border?: string
 ) {
   const width = badgeWidth(ctx, text);
   ctx.fillStyle = colors.background;
   ctx.beginPath();
   ctx.roundRect(x, y, width, BADGE_HEIGHT, BADGE_RADIUS);
   ctx.fill();
+  if (border) {
+    ctx.beginPath();
+    ctx.roundRect(
+      x + HALF_PIXEL,
+      y + HALF_PIXEL,
+      width - 1,
+      BADGE_HEIGHT - 1,
+      BADGE_RADIUS - HALF_PIXEL
+    );
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
   ctx.fillStyle = colors.text;
   drawText(ctx, text, x + BADGE_PADDING_X, y + BADGE_PADDING_Y, TEXT_SIZE);
   return width;

@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -22,11 +23,13 @@ function Tooltip({
   text,
   as: Element = "span",
   className,
+  style,
   children,
 }: {
   text: string;
   as?: "span" | "div";
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -77,6 +80,7 @@ function Tooltip({
         className={
           className ? `tooltip-trigger ${className}` : "tooltip-trigger"
         }
+        style={style}
         tabIndex={0}
         aria-describedby={open ? id : undefined}
         onPointerEnter={(e) => {

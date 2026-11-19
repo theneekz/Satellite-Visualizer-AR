@@ -311,7 +311,8 @@ export function createXRSatelliteCard(
           badge.text,
           badge.x,
           y,
-          BADGE_COLORS[badge.tone]
+          BADGE_COLORS.plain,
+          badge.border
         );
         helpRegions.push({
           x: badge.x,

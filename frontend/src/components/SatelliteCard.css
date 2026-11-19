@@ -98,11 +98,6 @@
   border-radius: 6px;
 }
 
-.satellite-card__badge--type {
-  color: #9fe1cb;
-  background: rgba(29, 158, 117, 0.22);
-}
-
 .satellite-card__badge--fresh {
   color: #c0dd97;
   background: rgba(99, 153, 34, 0.25);
